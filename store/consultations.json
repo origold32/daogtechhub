@@ -1,0 +1,136 @@
+[
+  {
+    "id": 1,
+    "image": "",
+    "name": "Dr Samuel Smith",
+    "specialty": "Medical Doctor",
+    "status": "ongoing",
+    "conversation": [
+      {
+        "title": "I’m feeling uneasy",
+        "discussion": "I have been experiencing chest pain and shortness of breath for the past few days. I am worried it might be something serious. Can you please advise me on what to do next?",
+        "doctorFeedback": "Please schedule an ECG and chest X-ray immediately.",
+        "testUploads": [
+          {
+            "type": "file",
+            "testName": "Chest X-ray",
+            "fileName": "chest-xray.png",
+            "url": "/images/chest-xray.png"
+          }
+        ]
+      }
+    ],
+    "date": "6 Jul, 2025",
+    "time": "10:00 AM"
+  },
+  {
+    "id": 2,
+    "image": "",
+    "name": "Dr Jane Doe",
+    "specialty": "Nurse",
+    "status": "closed",
+    "conversation": [
+      {
+        "title": "Follow-up on Heart Condition",
+        "discussion": "I had a heart condition diagnosed last month, and I wanted to follow up on my treatment plan. Can you provide me with the next steps?",
+        "doctorFeedback": "Continue current medication and monitor blood pressure twice daily.",
+        "testUploads": [
+          {
+            "type": "lab",
+            "testName": "Blood Pressure Log",
+            "result": "Avg: 135/85",
+            "interpretation": "Borderline high – monitor and reduce salt intake."
+          }
+        ]
+      }
+    ],
+    "date": "5 Jul, 2025",
+    "time": "2:00 PM"
+  },
+  {
+    "id": 3,
+    "image": "",
+    "name": "Dr Chris Okafor",
+    "specialty": "Medical Doctor",
+    "status": "closed",
+    "conversation": [
+      {
+        "title": "Fatigue & Dizziness",
+        "discussion": "I've been feeling constantly tired and lightheaded even after meals.",
+        "doctorFeedback": "Please do a blood sugar and urinalysis test, and report back with results.",
+        "testUploads": [
+          {
+            "type": "lab",
+            "testName": "Blood Sugar",
+            "result": "142",
+            "unit": "mg/dL",
+            "normalRange": "70–120 mg/dL",
+            "interpretation": "Slightly elevated – monitor regularly."
+          },
+          {
+            "type": "lab",
+            "testName": "Urinalysis",
+            "result": "pH: 6.5, Protein: Negative, Glucose: Trace",
+            "interpretation": "Monitor for glucose levels; retest in 1 week."
+          },
+          {
+            "type": "file",
+            "testName": "General Test Result",
+            "fileName": "test-summary.pdf",
+            "url": "/images/test-summary.pdf"
+          }
+        ]
+      }
+    ],
+    "date": "7 Jul, 2025",
+    "time": "9:30 AM"
+  },
+  {
+    "id": 4,
+    "image": "",
+    "name": "Nurse Gloria Uche",
+    "specialty": "Nurse",
+    "status": "ongoing",
+    "conversation": [
+      {
+        "title": "Skin rash and itching",
+        "discussion": "I've developed an itchy rash on my arms and legs. What could be the cause?",
+        "doctorFeedback": "Apply antihistamine cream and avoid harsh soaps. Consider an allergy test.",
+        "testUploads": [
+          {
+            "type": "file",
+            "testName": "Skin Image",
+            "fileName": "rash-photo.jpg",
+            "url": "/images/rash-photo.jpg"
+          }
+        ]
+      }
+    ],
+    "date": "8 Jul, 2025",
+    "time": "11:15 AM"
+  },
+  {
+    "id": 5,
+    "image": "",
+    "name": "Dr Philip Umeh",
+    "specialty": "Medical Doctor",
+    "status": "closed",
+    "conversation": [
+      {
+        "title": "Recurring headaches",
+        "discussion": "I’ve been having migraines every week. Painkillers only give temporary relief.",
+        "doctorFeedback": "Please undergo an MRI scan to rule out neurological causes.",
+        "testUploads": [
+          {
+            "type": "file",
+            "testName": "Brain MRI",
+            "fileName": "mri-scan.pdf",
+            "url": "/images/mri-scan.pdf"
+          }
+        ]
+      }
+    ],
+    "date": "4 Jul, 2025",
+    "time": "3:45 PM"
+  }
+]
