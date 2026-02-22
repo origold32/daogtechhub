@@ -1,5 +1,7 @@
 "use client";
 
+import Image from "next/image";
+
 import { forwardRef, ReactNode, useRef } from "react";
 import { motion, useInView } from "framer-motion";
 
@@ -128,11 +130,13 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
               >
                 {icon}
               </motion.div>
-              <div className="w-full h-full flex items-center justify-center">
-                <img
+              <div className="w-full h-full flex items-center justify-center relative">
+                <Image
                   src={imageSrc}
                   alt={imageAlt}
-                  className="w-full h-full object-contain"
+                  className="object-contain"
+                  fill
+                  priority
                 />
               </div>
             </div>

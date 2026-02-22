@@ -31,7 +31,8 @@ const features = [
   {
     icon: <Truck className="w-7 h-7 text-lilac" />,
     title: "Fast Delivery",
-    body: "Lagos-wide dispatch with tracking.",
+    body: "Fast Lagos dispatch and reliable nationwide delivery with tracking.",
+    // body: "Lagos-wide dispatch with tracking.",
   },
   {
     icon: <MessageCircle className="w-7 h-7 text-lilac" />,
@@ -129,7 +130,9 @@ export function WhySection() {
               animate={testimonialsInView ? "visible" : "hidden"}
               className="glass-card-small p-8"
             >
-              <p className="text-soft-white text-lg italic mb-4">"{t.quote}"</p>
+              <p className="text-soft-white text-lg italic mb-4">
+                &quot;{t.quote}&quot;
+              </p>
               <p className="text-lilac text-sm font-medium">— {t.author}</p>
             </motion.div>
           ))}

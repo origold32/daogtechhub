@@ -1,11 +1,13 @@
 "use client";
 
+import Image from "next/image";
+
 import { useEffect } from "react";
 import { motion, useAnimation } from "framer-motion";
 import { Zap } from "lucide-react";
 
 interface HeroSectionProps {
-  sectionRef: React.RefObject<HTMLElement | null>;
+  sectionRef: React.RefObject<HTMLElement>;
   onExploreClick: () => void;
 }
 
@@ -120,11 +122,15 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
               <Zap className="w-7 h-7 text-lilac" />
             </motion.div>
             <div className="w-full h-full flex flex-col items-center justify-center">
-              <img
-                src="/images/hero_phone.jpg"
-                alt="Featured Product"
-                className="w-full h-full object-contain"
-              />
+              <div className="relative w-full h-full">
+                <Image
+                  src="/images/hero_phone.jpg"
+                  alt="Featured Product"
+                  className="object-contain"
+                  fill
+                  sizes="(max-width: 1024px) 100vw, 34vw"
+                />
+              </div>
               <p className="text-muted-lavender text-sm mt-4">
                 Featured: Latest Drop
               </p>

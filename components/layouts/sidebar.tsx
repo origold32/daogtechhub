@@ -1,7 +1,7 @@
 "use client";
 
 import AppLogo from "../app-logo";
-import SparklingSeparator from "@/public/images/sparkling-separator";
+import SparklingSeparator from "../../public/images/sparkling-separator";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { usePathname } from "next/navigation";
@@ -79,15 +79,15 @@ export default function Sidebar({
               ? "translate-x-0 w-64"
               : "-translate-x-full w-64"
             : isCollapsed
-            ? "w-16"
-            : "w-64"
+              ? "w-16"
+              : "w-64",
         )}
       >
         <div className="flex items-center justify-between">
           <div
             className={cn(
               "flex items-center justify-center",
-              isMobile ? "w-full" : !isCollapsed ? "w-full" : "hidden"
+              isMobile ? "w-full" : !isCollapsed ? "w-full" : "hidden",
             )}
           >
             <AppLogo
@@ -126,7 +126,7 @@ export default function Sidebar({
                     isCollapsed && !isMobile
                       ? "justify-center p-2"
                       : "py-3 px-4 space-x-3",
-                    "text-[#A0AEC0] hover:bg-[#1a1c2b]"
+                    "text-[#A0AEC0] hover:bg-[#1a1c2b]",
                   )}
                   title={isCollapsed ? item.name : ""}
                 >
@@ -147,11 +147,11 @@ export default function Sidebar({
                   isCollapsed && !isMobile
                     ? "justify-center p-2"
                     : active
-                    ? "py-4 px-4 space-x-3"
-                    : "py-3 px-4 space-x-3",
+                      ? "py-4 px-4 space-x-3"
+                      : "py-3 px-4 space-x-3",
                   active
                     ? "bg-[#242637] text-white"
-                    : "text-[#A0AEC0] hover:bg-[#1a1c2b]"
+                    : "text-[#A0AEC0] hover:bg-[#1a1c2b]",
                 )}
                 title={isCollapsed ? item.name : ""}
               >

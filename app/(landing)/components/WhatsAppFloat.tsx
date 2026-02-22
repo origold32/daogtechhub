@@ -11,7 +11,8 @@ const WHATSAPP_NUMBER = "2348102557217";
 export function WhatsAppFloat() {
   return (
     <a
-      href={`https://wa.me/${WHATSAPP_NUMBER}`}
+      // href={`https://wa.me/${WHATSAPP_NUMBER}`}
+      href="https://wa.me/message/E72ZTEPGN45BP1?src=qr"
       target="_blank"
       rel="noopener noreferrer"
       aria-label="Chat with us on WhatsApp"

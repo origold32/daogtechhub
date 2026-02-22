@@ -26,7 +26,7 @@ export function Navigation({ links }: NavigationProps) {
 
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 z-50 px-6 lg:px-12 py-5 flex items-center justify-between bg-gradient-to-b from-[#1A0B2E]/80 to-transparent backdrop-blur-sm">
+      <nav className="fixed top-0 left-0 right-0 z-[100] px-6 lg:px-12 py-5 flex items-center justify-between bg-gradient-to-b from-[#1A0B2E]/80 to-transparent backdrop-blur-sm">
         <div className="text-2xl font-heading font-bold text-lilac tracking-wider hidden">
           DAOG
         </div>

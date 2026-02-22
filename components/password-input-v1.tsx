@@ -9,12 +9,14 @@ type PasswordInputV1Props = {
   name: string;
   placeholder?: string;
   confirmPassword?: boolean;
-  validate?: boolean; // enforce min 8 chars rule
+  validate?: boolean; // enforce validation rules
   numberOnly?: boolean; // restrict only numbers
   maxLength?: number; // for numberOnly case
   required?: boolean;
   className?: string;
   onChange?: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  /** Called with the raw confirm-password string so FormBuilder can track it */
+  onConfirmChange?: (value: string) => void;
 };
 
 export default function PasswordInputV1({
@@ -28,6 +30,7 @@ export default function PasswordInputV1({
   required,
   className,
   onChange,
+  onConfirmChange,
 }: PasswordInputV1Props) {
   const [show, setShow] = useState(false);
   const [showConfirm, setShowConfirm] = useState(false);
@@ -47,14 +50,13 @@ export default function PasswordInputV1({
     setValue(newValue);
     onChange?.({
       ...e,
-      target: { ...e.target, value: newValue },
+      target: { ...e.target, value: newValue, name },
     });
   };
 
   const handleConfirmChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     let newValue = e.target.value;
 
-    // Apply the same numberOnly and maxLength restrictions to confirm password
     if (numberOnly) {
       newValue = newValue.replace(/\D/g, "");
       if (maxLength) {
@@ -63,6 +65,7 @@ export default function PasswordInputV1({
     }
 
     setConfirmValue(newValue);
+    onConfirmChange?.(newValue);
   };
 
   const mismatch =
@@ -102,7 +105,6 @@ export default function PasswordInputV1({
     },
   ];
 
-  // Only show basic length validation for numberOnly
   const numberOnlyValidations = [
     {
       label: `At least ${maxLength || 4} digits`,
@@ -111,13 +113,22 @@ export default function PasswordInputV1({
   ];
 
   const currentValidations = numberOnly ? numberOnlyValidations : validations;
+  const allValid = validate ? currentValidations.every((v) => v.isValid) : true;
+  const confirmValid =
+    !confirmPassword || (confirmValue === value && confirmValue.length > 0);
 
   return (
     <div className={cn("space-y-4 w-full", className)}>
+      {/* Hidden inputs so FormData picks up both values */}
+      <input type="hidden" name={name} value={value} />
+      {confirmPassword && (
+        <input type="hidden" name={`${name}_confirm`} value={confirmValue} />
+      )}
+
       <div>
         <InputV1
           label={label || "Password"}
-          name={name}
+          name={`${name}_visible`}
           type={inputType}
           placeholder={placeholder}
           value={value}
@@ -126,6 +137,13 @@ export default function PasswordInputV1({
           inputMode={numberOnly ? "numeric" : "text"}
           pattern={numberOnly ? "[0-9]*" : undefined}
           maxLength={numberOnly ? maxLength : undefined}
+          // Block native form submission when validate rules are unmet
+          {...(validate && !allValid
+            ? {
+                title:
+                  "Please meet the password requirements before submitting",
+              }
+            : {})}
           rightElement={
             <button
               type="button"
@@ -137,16 +155,16 @@ export default function PasswordInputV1({
           }
         />
 
-        {/* Password validation grid - show when validate is true and there's input */}
+        {/* Validation checklist */}
         {validate && value.length > 0 && (
           <div className="mt-2 p-3 bg-gray-50 rounded-md border">
-            <div className={cn("grid gap-2")}>
+            <div className="grid gap-2">
               {currentValidations.map((validation, index) => (
                 <div
                   key={index}
                   className={cn(
                     "flex items-center gap-2 text-xs transition-colors",
-                    validation.isValid ? "text-green-600" : "text-red-500"
+                    validation.isValid ? "text-green-600" : "text-red-500",
                   )}
                 >
                   {validation.isValid ? (
@@ -161,7 +179,7 @@ export default function PasswordInputV1({
           </div>
         )}
 
-        {/* Helper text - show only when empty and validate is true */}
+        {/* Helper text when field is empty */}
         {validate && value.length === 0 && (
           <p className="text-xs text-gray-500 mt-1">
             {numberOnly
@@ -197,6 +215,20 @@ export default function PasswordInputV1({
             <p className="text-xs text-red-500 mt-1">Passwords do not match</p>
           )}
         </div>
+      )}
+
+      {/*
+        Invisible submit-blocker: a required hidden input that only has a value
+        when both validate passes AND passwords match. This prevents native
+        form submission without any JavaScript gate in the parent.
+      */}
+      {(validate || confirmPassword) && (
+        <input
+          type="hidden"
+          name={`${name}_valid`}
+          value={allValid && confirmValid ? "true" : ""}
+          required={validate || confirmPassword}
+        />
       )}
     </div>
   );

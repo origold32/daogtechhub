@@ -45,7 +45,7 @@ export default function Page() {
       <Navigation links={navLinks} />
 
       <HeroSection
-        sectionRef={heroRef}
+        sectionRef={heroRef as React.RefObject<HTMLElement>}
         onExploreClick={() => scrollTo(gadgetsRef)}
       />
 
