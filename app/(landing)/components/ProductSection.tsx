@@ -94,7 +94,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
           style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
-          <div className={cn("w-full lg:w-[40vw] mt-20 lg:mt-0")}>
+          <div className={cn("w-full lg:w-[40vw] mt-24 lg:mt-0")}>
             <motion.h2
               variants={textVariants}
               initial="hidden"
@@ -123,7 +123,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
             variants={cardVariants}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
-            className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-10 lg:mt-0")}
+            className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-16 lg:mt-0")}
           >
             <div className="glass-card p-6 lg:p-8 relative h-[50vh] sm:h-[55vh] lg:h-[68vh]">
               <motion.div

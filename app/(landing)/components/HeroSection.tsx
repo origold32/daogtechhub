@@ -76,7 +76,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
       >
         {/* Left: text */}
         <motion.div
-          className={cn("w-full lg:w-[44vw] mt-20 lg:mt-0")}
+          className={cn("w-full lg:w-[44vw] mt-24 lg:mt-0")}
           variants={containerVariants}
           initial="hidden"
           animate={controls}
@@ -126,7 +126,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
           variants={cardVariants}
           initial="hidden"
           animate={controls}
-          className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-10 lg:mt-0")}
+          className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-16 lg:mt-0")}
         >
           <div
             className={cn(
