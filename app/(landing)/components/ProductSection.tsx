@@ -94,28 +94,35 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
           style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
-          <div className="w-full lg:w-[40vw] bg-blue-500 lg:bg-transparent pt-36 pb-16 lg:py-0">
-            <motion.h2
-              variants={textVariants}
-              initial="hidden"
-              animate={isInView ? "visible" : "hidden"}
-              className="heading-lg font-heading text-soft-white mb-6"
+          <div className="w-full lg:w-[40vw] relative min-h-[60vh] lg:min-h-0">
+            <div
+              className={cn(
+                "absolute bottom-16 left-0 w-full px-6",
+                "lg:static lg:px-0",
+              )}
             >
-              {title}
-            </motion.h2>
+              <motion.h2
+                variants={textVariants}
+                initial="hidden"
+                animate={isInView ? "visible" : "hidden"}
+                className="heading-lg font-heading text-soft-white mb-6"
+              >
+                {title}
+              </motion.h2>
 
-            <motion.div
-              variants={bodyVariants}
-              initial="hidden"
-              animate={isInView ? "visible" : "hidden"}
-            >
-              <p className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8">
-                {description}
-              </p>
-              <button onClick={onCta} className="btn-primary">
-                {ctaLabel}
-              </button>
-            </motion.div>
+              <motion.div
+                variants={bodyVariants}
+                initial="hidden"
+                animate={isInView ? "visible" : "hidden"}
+              >
+                <p className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8">
+                  {description}
+                </p>
+                <button onClick={onCta} className="btn-primary">
+                  {ctaLabel}
+                </button>
+              </motion.div>
+            </div>
           </div>
 
           {/* Right: card */}

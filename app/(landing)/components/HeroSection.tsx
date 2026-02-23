@@ -75,58 +75,59 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
         style={{ minHeight: "100vh" }}
       >
         {/* Left: text */}
-        <motion.div
-          className={cn("w-full lg:w-[44vw] pt-24 pb-16 lg:py-0")}
-          variants={containerVariants}
-          initial="hidden"
-          animate={controls}
-        >
-          <motion.p
-            variants={fadeUpVariants}
+        <div className="w-full lg:w-[44vw] relative min-h-[60vh] lg:min-h-0">
+          <motion.div
             className={cn(
-              "text-muted-lavender text-xs uppercase tracking-[0.18em] mb-4",
+              "absolute top-[65%] -translate-y-1/2 left-0 w-full px-6",
+              "lg:static lg:px-0",
             )}
+            variants={containerVariants}
+            initial="hidden"
+            animate={controls}
           >
-            DAOG TECH HUB
-          </motion.p>
+            <motion.p
+              variants={fadeUpVariants}
+              className="text-muted-lavender text-xs uppercase tracking-[0.18em] mb-4"
+            >
+              DAOG TECH HUB
+            </motion.p>
 
-          <h1
-            className={cn(
-              "heading-xl font-heading text-soft-white mb-6 overflow-hidden",
-            )}
-          >
-            <motion.span variants={lineVariants} className="block">
-              EVERYTHING
-            </motion.span>
-            <motion.span variants={lineVariants} className="block">
-              YOU WANT
-            </motion.span>
-          </h1>
+            <h1 className="heading-xl font-heading text-soft-white mb-6 overflow-hidden">
+              <motion.span variants={lineVariants} className="block">
+                EVERYTHING
+              </motion.span>
+              <motion.span variants={lineVariants} className="block">
+                YOU WANT
+              </motion.span>
+            </h1>
 
-          <motion.p
-            variants={fadeUpVariants}
-            className={cn(
-              "text-muted-lavender text-lg lg:text-xl max-w-md mb-8",
-            )}
-          >
-            Gadgets, jerseys, cars & homes—curated and delivered.
-          </motion.p>
+            <motion.p
+              variants={fadeUpVariants}
+              className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8"
+            >
+              Gadgets, jerseys, cars & homes—curated and delivered.
+            </motion.p>
 
-          <motion.button
-            variants={fadeUpVariants}
-            onClick={onExploreClick}
-            className="btn-primary"
-          >
-            Explore Products
-          </motion.button>
-        </motion.div>
+            <motion.button
+              variants={fadeUpVariants}
+              onClick={onExploreClick}
+              className="btn-primary"
+            >
+              Explore Products
+            </motion.button>
+          </motion.div>
+        </div>
 
         {/* Right: card */}
         <motion.div
           variants={cardVariants}
           initial="hidden"
           animate={controls}
-          className={cn("flex flex-col ml-0 lg:ml-auto", "w-full lg:w-[34vw]")}
+          className={cn(
+            "flex flex-col ml-0 lg:ml-auto",
+            "w-full lg:w-[34vw]",
+            "mt-16 lg:mt-0",
+          )}
         >
           <div
             className={cn(
