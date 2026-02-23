@@ -76,7 +76,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
       >
         {/* Left: text */}
         <motion.div
-          className={cn("w-full lg:w-[44vw] pt-20 pb-8 lg:py-0")}
+          className={cn("w-full lg:w-[44vw] pt-20 pb-10 lg:py-0")}
           variants={containerVariants}
           initial="hidden"
           animate={controls}
@@ -131,7 +131,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
           <div
             className={cn(
               "glass-card p-6 lg:p-8 relative",
-              "h-[40vh] sm:h-[55vh] lg:h-[72vh]",
+              "h-[50vh] sm:h-[55vh] lg:h-[72vh]",
             )}
           >
             <motion.div
