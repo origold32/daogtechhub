@@ -75,7 +75,7 @@ export default function Page() {
         onCta={() => router.push("/jerseys")}
         // onCta={() => window.open(WA_LINK, "_blank")}
         icon={<Star className="w-7 h-7 text-lilac" />}
-        imageSrc="/images/jerseys_shirt.jpg"
+        imageSrc="/images/jerseys_shirt.png"
         imageAlt="Jerseys"
         zClass="z-30"
         gradientPosition="circle_at_28%_55%"
