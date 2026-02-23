@@ -69,12 +69,14 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
       />
 
       <div
-        className={cn("relative flex items-center px-6 lg:px-[9vw]")}
+        className={cn(
+          "relative flex flex-col lg:flex-row items-center px-6 lg:px-[9vw]",
+        )}
         style={{ minHeight: "100vh" }}
       >
         {/* Left: text */}
         <motion.div
-          className={cn("w-full lg:w-[44vw] py-24 lg:py-0")}
+          className={cn("w-full lg:w-[44vw] pt-20 pb-8 lg:py-0")}
           variants={containerVariants}
           initial="hidden"
           animate={controls}
@@ -124,12 +126,13 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
           variants={cardVariants}
           initial="hidden"
           animate={controls}
-          className={cn("hidden lg:flex lg:flex-col ml-auto")}
-          style={{ width: "34vw" }}
+          className={cn("flex flex-col ml-0 lg:ml-auto", "w-full lg:w-[34vw]")}
         >
           <div
-            className={cn("glass-card p-8 relative")}
-            style={{ height: "72vh" }}
+            className={cn(
+              "glass-card p-6 lg:p-8 relative",
+              "h-[40vh] sm:h-[55vh] lg:h-[72vh]",
+            )}
           >
             <motion.div
               variants={badgeVariants}

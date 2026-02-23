@@ -88,11 +88,13 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
 
         <div
           ref={innerRef}
-          className="relative flex items-center px-6 lg:px-[9vw]"
+          className={cn(
+            "relative flex flex-col lg:flex-row items-center px-6 lg:px-[9vw]",
+          )}
           style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
-          <div className="w-full lg:w-[40vw] py-24 lg:py-0">
+          <div className="w-full lg:w-[40vw] py-16 lg:py-0">
             <motion.h2
               variants={textVariants}
               initial="hidden"
@@ -121,10 +123,14 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
             variants={cardVariants}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
-            className="hidden lg:flex lg:flex-col ml-auto"
-            style={{ width: "36vw" }}
+            className={cn(
+              "flex flex-col",
+              "w-full lg:w-[36vw]",
+              "mt-12 lg:mt-0",
+              "ml-0 lg:ml-auto",
+            )}
           >
-            <div className="glass-card p-8 relative" style={{ height: "68vh" }}>
+            <div className="glass-card p-6 lg:p-8 relative h-[40vh] sm:h-[55vh] lg:h-[68vh]">
               <motion.div
                 variants={badgeVariants}
                 initial="hidden"
