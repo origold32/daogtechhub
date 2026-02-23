@@ -1,9 +1,7 @@
 {
-    "postman.settings.dotenv-detection-notification-visibility": false,
-    "cSpell.words": [
-        "Catption",
-        "lasuhealth",
-        "matric",
-        "sonner"
-    ]
+  "postman.settings.dotenv-detection-notification-visibility": false,
+  "cSpell.words": ["Catption", "sonner"],
+  "files.exclude": {
+    "**/node_modules": true
+  }
 }
