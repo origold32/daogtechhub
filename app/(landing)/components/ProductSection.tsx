@@ -97,7 +97,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
           <div className="w-full lg:w-[40vw] relative min-h-[60vh] lg:min-h-0">
             <div
               className={cn(
-                "absolute bottom-16 left-0 w-full px-6",
+                "absolute bottom-12 left-0 w-full px-6",
                 "lg:static lg:px-0",
               )}
             >

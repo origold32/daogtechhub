@@ -78,7 +78,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
         <div className="w-full lg:w-[44vw] relative min-h-[60vh] lg:min-h-0">
           <motion.div
             className={cn(
-              "absolute top-[65%] -translate-y-1/2 left-0 w-full px-6",
+              "absolute top-[55%] -translate-y-1/2 left-0 w-full px-6",
               "lg:static lg:px-0",
             )}
             variants={containerVariants}
@@ -126,7 +126,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
           className={cn(
             "flex flex-col ml-0 lg:ml-auto",
             "w-full lg:w-[34vw]",
-            "mt-16 lg:mt-0",
+            "mt-12 lg:mt-0",
           )}
         >
           <div
