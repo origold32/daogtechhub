@@ -94,7 +94,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
           style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
-          <div className="w-full lg:w-[40vw] bg-red-500 lg:bg-transparent pt-28 pb-16 lg:py-0">
+          <div className="w-full lg:w-[40vw] bg-green-500 lg:bg-transparent pt-32 pb-16 lg:py-0">
             <motion.h2
               variants={textVariants}
               initial="hidden"
