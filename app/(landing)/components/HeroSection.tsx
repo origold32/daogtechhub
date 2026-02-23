@@ -1,10 +1,10 @@
 "use client";
 
 import Image from "next/image";
-
 import { useEffect } from "react";
 import { motion, useAnimation } from "framer-motion";
 import { Zap } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 interface HeroSectionProps {
   sectionRef: React.RefObject<HTMLElement>;
@@ -58,30 +58,41 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
   return (
     <section
       ref={sectionRef}
-      className="relative bg-deep-purple"
+      className={cn("relative")}
       style={{ minHeight: "100vh" }}
     >
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_38%_55%,rgba(212,165,255,0.18),transparent_55%)]" />
+      <div
+        className={cn(
+          "absolute inset-0",
+          "bg-[radial-gradient(circle_at_38%_55%,rgba(212,165,255,0.18),transparent_55%)]",
+        )}
+      />
 
       <div
-        className="relative flex items-center px-6 lg:px-[9vw]"
+        className={cn("relative flex items-center px-6 lg:px-[9vw]")}
         style={{ minHeight: "100vh" }}
       >
         {/* Left: text */}
         <motion.div
-          className="w-full lg:w-[44vw] py-24 lg:py-0"
+          className={cn("w-full lg:w-[44vw] py-24 lg:py-0")}
           variants={containerVariants}
           initial="hidden"
           animate={controls}
         >
           <motion.p
             variants={fadeUpVariants}
-            className="text-muted-lavender text-xs uppercase tracking-[0.18em] mb-4"
+            className={cn(
+              "text-muted-lavender text-xs uppercase tracking-[0.18em] mb-4",
+            )}
           >
             DAOG TECH HUB
           </motion.p>
 
-          <h1 className="heading-xl font-heading text-soft-white mb-6 overflow-hidden">
+          <h1
+            className={cn(
+              "heading-xl font-heading text-soft-white mb-6 overflow-hidden",
+            )}
+          >
             <motion.span variants={lineVariants} className="block">
               EVERYTHING
             </motion.span>
@@ -92,7 +103,9 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
 
           <motion.p
             variants={fadeUpVariants}
-            className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8"
+            className={cn(
+              "text-muted-lavender text-lg lg:text-xl max-w-md mb-8",
+            )}
           >
             Gadgets, jerseys, cars & homes—curated and delivered.
           </motion.p>
@@ -106,18 +119,23 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
           </motion.button>
         </motion.div>
 
-        {/* Right: card — flex sibling, no absolute positioning */}
+        {/* Right: card */}
         <motion.div
           variants={cardVariants}
           initial="hidden"
           animate={controls}
-          className="hidden lg:flex lg:flex-col ml-auto"
+          className={cn("hidden lg:flex lg:flex-col ml-auto")}
           style={{ width: "34vw" }}
         >
-          <div className="glass-card p-8 relative" style={{ height: "72vh" }}>
+          <div
+            className={cn("glass-card p-8 relative")}
+            style={{ height: "72vh" }}
+          >
             <motion.div
               variants={badgeVariants}
-              className="icon-badge absolute -top-4 -right-4 animate-float"
+              className={cn(
+                "icon-badge absolute -top-4 -right-4 animate-float",
+              )}
             >
               <Zap className="w-7 h-7 text-lilac" />
             </motion.div>

@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-
 import { forwardRef, ReactNode, useRef } from "react";
 import { motion, useInView } from "framer-motion";
+import { cn } from "@/lib/utils";
 
 interface ProductSectionProps {
   slug: string;
@@ -76,11 +76,14 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
     return (
       <section
         ref={forwardedRef}
-        className={`relative bg-deep-purple ${zClass}`}
+        className={cn("relative", zClass)}
         style={{ minHeight: "100vh" }}
       >
         <div
-          className={`absolute inset-0 bg-[radial-gradient(${gradientPosition},rgba(212,165,255,0.16),transparent_55%)]`}
+          className={cn(
+            "absolute inset-0",
+            `bg-[radial-gradient(${gradientPosition},rgba(212,165,255,0.16),transparent_55%)]`,
+          )}
         />
 
         <div
@@ -113,7 +116,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
             </motion.div>
           </div>
 
-          {/* Right: card — uses flex alignment, no absolute positioning conflict */}
+          {/* Right: card */}
           <motion.div
             variants={cardVariants}
             initial="hidden"

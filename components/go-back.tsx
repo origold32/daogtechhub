@@ -18,26 +18,23 @@ const GoBack = ({
   link,
   onClick,
   label = "Go back",
-  showIcon,
+  showIcon = true,
 }: GoBackProps) => {
   const router = useRouter();
 
   const content = (
     <>
-      {showIcon && <ChevronLeft color="#121528" />}
+      {showIcon && <ChevronLeft color="rgb(243, 233, 255)" />}
       {label}
     </>
   );
 
+  const baseClasses =
+    "flex gap-2 items-center font-semibold cursor-pointer w-max text-[rgb(243,233,255)]";
+
   if (link) {
     return (
-      <Link
-        href={link}
-        className={cn(
-          "flex gap-2 items-center font-semibold text-[#121528] w-max",
-          className
-        )}
-      >
+      <Link href={link} className={cn(baseClasses, className)}>
         {content}
       </Link>
     );
@@ -52,10 +49,7 @@ const GoBack = ({
           router.back();
         }
       }}
-      className={cn(
-        "flex gap-2 items-center font-semibold text-[#121528] cursor-pointer w-max",
-        className
-      )}
+      className={cn(baseClasses, className)}
     >
       {content}
     </button>

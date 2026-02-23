@@ -2,6 +2,7 @@
 
 import { useRef, RefObject } from "react";
 import { Smartphone, Star, Gauge, Home } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 import { Navigation } from "./components/Navigation";
 import { HeroSection } from "./components/HeroSection";
@@ -16,6 +17,7 @@ const WA_LINK = "https://wa.me/2348102557217";
 // .section-full { min-height: 100vh; position: relative; }
 
 export default function Page() {
+  const router = useRouter();
   // Refs for nav scroll-to and hero CTA
   const heroRef = useRef<HTMLElement>(null);
   const gadgetsRef = useRef<HTMLElement>(null);
@@ -55,7 +57,8 @@ export default function Page() {
         title="GADGETS"
         description="Phones, laptops, accessories—tested, genuine, ready."
         ctaLabel="Shop Gadgets"
-        onCta={() => window.open(WA_LINK, "_blank")}
+        onCta={() => router.push("/gadgets")}
+        // onCta={() => window.open(WA_LINK, "_blank")}
         icon={<Smartphone className="w-7 h-7 text-lilac" />}
         imageSrc="/images/gadgets_phone.jpg"
         imageAlt="Gadgets"
@@ -69,7 +72,8 @@ export default function Page() {
         title="JERSEYS"
         description="Club kits, player editions, drops—authentic and fast."
         ctaLabel="Browse Jerseys"
-        onCta={() => window.open(WA_LINK, "_blank")}
+        onCta={() => router.push("/jerseys")}
+        // onCta={() => window.open(WA_LINK, "_blank")}
         icon={<Star className="w-7 h-7 text-lilac" />}
         imageSrc="/images/jerseys_shirt.jpg"
         imageAlt="Jerseys"
@@ -83,7 +87,8 @@ export default function Page() {
         title="CARS"
         description="Sedans, SUVs, trucks—inspected, clear paperwork, ready to drive."
         ctaLabel="View Cars"
-        onCta={() => window.open(WA_LINK, "_blank")}
+        onCta={() => router.push("/cars")}
+        // onCta={() => window.open(WA_LINK, "_blank")}
         icon={<Gauge className="w-7 h-7 text-lilac" />}
         imageSrc="/images/cars_vehicle.jpg"
         imageAlt="Cars"
@@ -97,7 +102,8 @@ export default function Page() {
         title="REAL ESTATE"
         description="Homes, land, rentals—verified listings and honest guidance."
         ctaLabel="See Listings"
-        onCta={() => window.open(WA_LINK, "_blank")}
+        onCta={() => router.push("/realestate")}
+        // onCta={() => window.open(WA_LINK, "_blank")}
         icon={<Home className="w-7 h-7 text-lilac" />}
         imageSrc="/images/realestate_house.jpg"
         imageAlt="Real Estate"
