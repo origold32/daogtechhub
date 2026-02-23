@@ -1,3 +1,5 @@
+// app/(landing)/components/ContactSection.tsx
+
 "use client";
 
 import { forwardRef, useRef, useState } from "react";
@@ -17,9 +19,7 @@ type FormStatus = "idle" | "loading" | "success" | "error";
 export const ContactSection = forwardRef<HTMLElement>(
   function ContactSection(_, forwardedRef) {
     const innerRef = useRef<HTMLDivElement>(null);
-    const footerRef = useRef<HTMLDivElement>(null);
     const isInView = useInView(innerRef, { once: false, amount: 0.15 });
-    const footerInView = useInView(footerRef, { once: false, amount: 0.5 });
 
     const [status, setStatus] = useState<FormStatus>("idle");
     const [errorMsg, setErrorMsg] = useState("");
@@ -65,9 +65,9 @@ export const ContactSection = forwardRef<HTMLElement>(
     return (
       <section
         ref={forwardedRef}
-        className="relative bg-mid-purple py-24 lg:py-32 overflow-hidden"
+        className="relative bg-mid-purple py-24 lg:py-32 overflow-hidden z-10"
       >
-        <div className="absolute inset-0 bg-[radial-gradient(circle_at_50%_0%,rgba(212,165,255,0.18),transparent_55%)]" />
+        <div className="absolute inset-0 pointer-events-none bg-[radial-gradient(circle_at_50%_0%,rgba(212,165,255,0.18),transparent_55%)]" />
 
         <div
           ref={innerRef}
@@ -232,40 +232,6 @@ export const ContactSection = forwardRef<HTMLElement>(
             </motion.div>
           </div>
         </div>
-
-        {/* Footer */}
-        <motion.div
-          ref={footerRef}
-          initial={{ y: 16, opacity: 0 }}
-          animate={footerInView ? { y: 0, opacity: 1 } : { y: 16, opacity: 0 }}
-          transition={{ duration: 0.5, ease: "easeOut" }}
-          className="mt-20 pt-10 border-t border-lilac/20"
-        >
-          <div className="max-w-6xl mx-auto px-6 lg:px-12 flex flex-col md:flex-row items-center justify-between gap-6">
-            <div className="text-center md:text-left">
-              <p className="text-2xl font-heading font-bold text-lilac tracking-wider mb-2">
-                DAOG
-              </p>
-              <p className="text-muted-lavender text-sm">
-                Everything you want, one place.
-              </p>
-            </div>
-            <div className="flex items-center gap-6">
-              <a
-                href="#"
-                className="text-muted-lavender hover:text-lilac text-sm transition-colors"
-              >
-                Privacy
-              </a>
-              <a
-                href="#"
-                className="text-muted-lavender hover:text-lilac text-sm transition-colors"
-              >
-                Terms
-              </a>
-            </div>
-          </div>
-        </motion.div>
       </section>
     );
   },

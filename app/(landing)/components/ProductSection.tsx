@@ -1,3 +1,5 @@
+// app/(landing)/components/ProductSection.tsx
+
 "use client";
 
 import Image from "next/image";
@@ -74,11 +76,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
     const isInView = useInView(innerRef, { once: false, amount: 0.25 });
 
     return (
-      <section
-        ref={forwardedRef}
-        className={cn("relative", zClass)}
-        style={{ minHeight: "100vh" }}
-      >
+      <section ref={forwardedRef} className={cn("section-full", zClass)}>
         <div
           className={cn(
             "absolute inset-0",
@@ -89,9 +87,8 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
         <div
           ref={innerRef}
           className={cn(
-            "relative flex flex-col lg:flex-row items-center px-6 lg:px-[9vw]",
+            "section-full flex flex-col lg:flex-row items-center px-6 lg:px-[9vw]",
           )}
-          style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
           <div className={cn("w-full lg:w-[40vw] mt-28 lg:mt-0")}>

@@ -1,3 +1,5 @@
+// app/(landing)/components/WhatsAppFloat.tsx
+
 "use client";
 
 const WHATSAPP_NUMBER = "2348102557217";

@@ -1,3 +1,5 @@
+// app/(landing)/components/HeroSection.tsx
+
 "use client";
 
 import Image from "next/image";
@@ -56,11 +58,7 @@ export function HeroSection({ sectionRef, onExploreClick }: HeroSectionProps) {
   }, [controls]);
 
   return (
-    <section
-      ref={sectionRef}
-      className={cn("relative")}
-      style={{ minHeight: "100vh" }}
-    >
+    <section ref={sectionRef} className="section-full">
       <div
         className={cn(
           "absolute inset-0",

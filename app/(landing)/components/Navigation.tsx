@@ -1,3 +1,5 @@
+// app/(landing)/components/Navigation.tsx
+
 "use client";
 
 import { useState, RefObject } from "react";

@@ -1,3 +1,5 @@
+// app/(landing)/page.tsx
+
 "use client";
 
 import { useRef, RefObject } from "react";
@@ -10,11 +12,7 @@ import { ProductSection } from "./components/ProductSection";
 import { WhySection } from "./components/WhySection";
 import { ContactSection } from "./components/ContactSection";
 import { WhatsAppFloat } from "./components/WhatsAppFloat";
-
-const WA_LINK = "https://wa.me/2348102557217";
-
-// CSS to add to your global stylesheet
-// .section-full { min-height: 100vh; position: relative; }
+import FooterSection from "./components/FooterSection";
 
 export default function Page() {
   const router = useRouter();
@@ -85,7 +83,7 @@ export default function Page() {
         ref={carsRef}
         slug="cars"
         title="CARS"
-        description="Sedans, SUVs, trucks—inspected, clear paperwork, ready to drive."
+        description="Sedans, SUVs, trucks—inspected & luxury vehicles, clear paperwork, ready to drive."
         ctaLabel="View Cars"
         onCta={() => router.push("/cars")}
         // onCta={() => window.open(WA_LINK, "_blank")}
@@ -114,6 +112,7 @@ export default function Page() {
       <WhySection />
 
       <ContactSection ref={contactRef} />
+      <FooterSection />
 
       <WhatsAppFloat />
     </div>

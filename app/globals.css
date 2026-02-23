@@ -1,3 +1,5 @@
+/* globals.css */
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
@@ -277,4 +279,9 @@ textarea::placeholder {
 
 .nav-link:hover {
   color: #d4a5ff;
+}
+
+.section-full {
+  min-height: 100vh;
+  position: relative;
 }

@@ -1,3 +1,5 @@
+// app/realestate/page.tsx
+
 import GoBack from "@/components/go-back";
 import React from "react";
 

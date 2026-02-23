@@ -24,12 +24,14 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html
-      lang="en"
-      className=" scroll_hide overflow-auto [scrollbar-gutter:stable;] overscroll-contain"
-    >
+    <html lang="en" className=" scroll_hide overscroll-contain">
       <body
-        className={cn(nunito.className, inter.className, montserrat.className)}
+        className={cn(
+          nunito.className,
+          inter.className,
+          montserrat.className,
+          "overflow-x-hidden",
+        )}
       >
         <Suspense
           fallback={
