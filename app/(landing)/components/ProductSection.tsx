@@ -94,35 +94,28 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
           style={{ minHeight: "100vh" }}
         >
           {/* Left: text */}
-          <div className="w-full lg:w-[40vw] relative min-h-[60vh] lg:min-h-0">
-            <div
-              className={cn(
-                "absolute bottom-12 left-0 w-full px-6",
-                "lg:static lg:px-0",
-              )}
+          <div className={cn("w-full lg:w-[40vw] mt-20 lg:mt-0")}>
+            <motion.h2
+              variants={textVariants}
+              initial="hidden"
+              animate={isInView ? "visible" : "hidden"}
+              className="heading-lg font-heading text-soft-white mb-6"
             >
-              <motion.h2
-                variants={textVariants}
-                initial="hidden"
-                animate={isInView ? "visible" : "hidden"}
-                className="heading-lg font-heading text-soft-white mb-6"
-              >
-                {title}
-              </motion.h2>
+              {title}
+            </motion.h2>
 
-              <motion.div
-                variants={bodyVariants}
-                initial="hidden"
-                animate={isInView ? "visible" : "hidden"}
-              >
-                <p className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8">
-                  {description}
-                </p>
-                <button onClick={onCta} className="btn-primary">
-                  {ctaLabel}
-                </button>
-              </motion.div>
-            </div>
+            <motion.div
+              variants={bodyVariants}
+              initial="hidden"
+              animate={isInView ? "visible" : "hidden"}
+            >
+              <p className="text-muted-lavender text-lg lg:text-xl max-w-md mb-8">
+                {description}
+              </p>
+              <button onClick={onCta} className="btn-primary">
+                {ctaLabel}
+              </button>
+            </motion.div>
           </div>
 
           {/* Right: card */}
@@ -130,11 +123,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
             variants={cardVariants}
             initial="hidden"
             animate={isInView ? "visible" : "hidden"}
-            className={cn(
-              "flex flex-col",
-              "w-full lg:w-[36vw]",
-              "ml-0 lg:ml-auto",
-            )}
+            className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-10 lg:mt-0")}
           >
             <div className="glass-card p-6 lg:p-8 relative h-[50vh] sm:h-[55vh] lg:h-[68vh]">
               <motion.div
