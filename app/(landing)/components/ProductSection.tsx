@@ -87,7 +87,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
         <div
           ref={innerRef}
           className={cn(
-            "section-full flex flex-col lg:flex-row items-center px-6 lg:px-[9vw]",
+            "section-full flex flex-col lg:flex-row items-center px-6 lg:px-[9vw] overflow-hidden",
           )}
         >
           {/* Left: text */}
@@ -122,7 +122,7 @@ export const ProductSection = forwardRef<HTMLElement, ProductSectionProps>(
             animate={isInView ? "visible" : "hidden"}
             className={cn("w-full lg:w-[34vw] ml-0 lg:ml-auto mt-16 lg:mt-0")}
           >
-            <div className="glass-card p-6 lg:p-8 relative h-[50vh] sm:h-[55vh] lg:h-[68vh]">
+            <div className="glass-card p-6 lg:p-8 relative h-[50vh] sm:h-[55vh] lg:h-[68vh] overflow-visible">
               <motion.div
                 variants={badgeVariants}
                 initial="hidden"
