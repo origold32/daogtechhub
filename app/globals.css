@@ -35,6 +35,8 @@
   }
   html {
     scroll-behavior: auto;
+    scrollbar-width: thin;
+    scrollbar-color: #d4a5ff #1a0b2e;
   }
   body {
     @apply bg-background text-foreground antialiased;
@@ -63,6 +65,14 @@
   background-color: #2e1a47;
 }
 
+.bg-glass-purple {
+  background-color: rgba(46, 26, 71, 0.8);
+}
+
+.bg-lilac {
+  background-color: #d4a5ff;
+}
+
 .text-lilac {
   color: #d4a5ff;
 }
@@ -77,6 +87,10 @@
 
 .border-lilac {
   border-color: rgba(212, 165, 255, 0.55);
+}
+
+.border-lilac-light {
+  border-color: rgba(212, 165, 255, 0.165);
 }
 
 /* Card Styles */
@@ -284,4 +298,5 @@ textarea::placeholder {
 .section-full {
   min-height: 100vh;
   position: relative;
+  overflow-x: hidden;
 }
