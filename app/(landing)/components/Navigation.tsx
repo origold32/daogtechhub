@@ -179,7 +179,6 @@ export function Navigation({ links }: NavigationProps) {
               className="absolute top-6 right-6 text-lilac p-2"
               aria-label="Close menu"
               onClick={() => setMobileOpen(false)}
-              //close button
             >
               <X size={24} />
             </button>
