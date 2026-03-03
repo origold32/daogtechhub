@@ -107,7 +107,7 @@ export function Navigation({ links }: NavigationProps) {
 
           {/* AUTH SECTION */}
 
-          {isAuthenticated && user && (
+          {isAuthenticated && user ? (
             <div className="hidden md:flex">
               <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -159,6 +159,15 @@ export function Navigation({ links }: NavigationProps) {
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
+          ) : (
+            <Button
+              onClick={() => router.push("/auth")}
+              variant="outline"
+              size="sm"
+              className="hidden md:flex border-lilac/50 text-lilac hover:bg-lilac hover:text-deep-purple"
+            >
+              Sign In
+            </Button>
           )}
         </div>
       </nav>
