@@ -65,6 +65,12 @@ const config = {
           border: "hsl(var(--sidebar-border))",
           ring: "hsl(var(--sidebar-ring))",
         },
+
+        lilac: "hsl(var(--lilac))",
+        "deep-purple": "hsl(var(--deep-purple))",
+        "glass-purple": "hsl(var(--glass-purple))",
+        "muted-lavender": "hsl(var(--muted-lavender))",
+        "soft-white": "hsl(var(--soft-white))",
       },
       borderRadius: {
         lg: "var(--radius)",

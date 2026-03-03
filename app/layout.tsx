@@ -3,8 +3,8 @@ import { Inter, Nunito, Montserrat } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "sonner";
 import { Suspense } from "react";
-import { DrawerProvider } from "@/components/drawer-manager";
-import { DialogProvider } from "@/components/dialog-manager";
+import { DrawerProvider } from "@/components/reusables/drawer-manager";
+import { DialogProvider } from "@/components/reusables/dialog-manager";
 import Loader3 from "@/components/loaders/loader-3";
 import { cn } from "@/lib/utils";
 

@@ -1,6 +1,6 @@
 import { Church, Copy } from "lucide-react";
 import React from "react";
-import TitleCatption from "../title-caption";
+import TitleCatption from "../reusables/title-caption";
 
 type Props = {};
 

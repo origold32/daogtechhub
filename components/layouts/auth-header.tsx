@@ -3,10 +3,10 @@
 import useUser from "@/hooks/useUser";
 import Link from "next/link";
 import { Skeleton } from "../ui/skeleton";
-import { SmartAvatar } from "../smart-avatar";
+import { SmartAvatar } from "../reusables/smart-avatar";
 import { LuBell } from "react-icons/lu";
 import { cn } from "@/lib/utils";
-import AppLogo from "../app-logo";
+import AppLogo from "../reusables/app-logo";
 import { useIsMobile } from "@/hooks/useMobile";
 
 type Props = {
@@ -27,9 +27,9 @@ const AuthHeader = ({ isSidebarCollapsed, showSidebar = false }: Props) => {
           ? cn(
               "left-0 right-0", // Full width
               // Add left margin to account for sidebar width, just like main content
-              !isMobile && (isSidebarCollapsed ? "ml-16" : "ml-64")
+              !isMobile && (isSidebarCollapsed ? "ml-16" : "ml-64"),
             )
-          : "left-0 right-0" // Full width when no sidebar
+          : "left-0 right-0", // Full width when no sidebar
       )}
     >
       <div className="container relative flex justify-between items-center h-full">
@@ -44,7 +44,7 @@ const AuthHeader = ({ isSidebarCollapsed, showSidebar = false }: Props) => {
             className={cn(
               "flex items-center space-x-4",
               // When sidebar exists, take full width to push content to the right
-              showSidebar && "ml-auto"
+              showSidebar && "ml-auto",
             )}
           >
             <Link

@@ -26,6 +26,10 @@
     --input: 270 30% 25%;
     --ring: 270 100% 82%;
     --radius: 1.75rem;
+    --lilac: 270 100% 82%;
+    --deep-purple: 270 55% 11%;
+    --glass-purple: 270 30% 20% / 0.8;
+    --muted-lavender: 270 30% 25%;
   }
 }
 
@@ -69,8 +73,19 @@
   background-color: rgba(46, 26, 71, 0.8);
 }
 
+.border-glass-purple {
+  border-color: rgba(46, 26, 71, 0.8);
+}
+
 .bg-lilac {
   background-color: #d4a5ff;
+}
+
+.bg-muted-lavender {
+  background-color: #bfa0d9;
+}
+.text-deep-purple {
+  color: #1a0b2e;
 }
 
 .text-lilac {

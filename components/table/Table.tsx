@@ -3,7 +3,7 @@
 import React, { ReactNode, useEffect, useRef } from "react";
 import useOverflowCheck from "@/hooks/useOverflowCheck";
 import { ChevronRight, LoaderIcon } from "lucide-react";
-import EmptyState from "../empty-state";
+import EmptyState from "../reusables/empty-state";
 
 const Table = ({
   isLoading,

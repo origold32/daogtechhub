@@ -3,7 +3,7 @@ import { Activity, LucideProps } from "lucide-react";
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { cn } from "@/lib/utils";
-import TitleCatption from "@/components/title-caption";
+import TitleCatption from "@/components/reusables/title-caption";
 import formatNumberWithCommas from "@/lib/formatNumbersWithCommas";
 import {
   Select,
@@ -12,7 +12,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Currency } from "../currency-amount";
+import { Currency } from "../reusables/currency-amount";
 
 export interface CardAnalytics2Props {
   title: string | number;
@@ -45,7 +45,7 @@ const CardAnalytics2 = ({
     <Card
       className={cn(
         "relative rounded-xl p-4 md:px-10 py-6 flex items-center gap-4 min-w-[250px] sm:min-w-[300px] h-max md:h-44 w-full bg-[#242424]",
-        className
+        className,
       )}
     >
       {hasCurrSelect ? (
@@ -70,7 +70,7 @@ const CardAnalytics2 = ({
 
       <div
         className={cn(
-          "grid place-content-center p-4 rounded-full  w-16 h-16 bg-white/10"
+          "grid place-content-center p-4 rounded-full  w-16 h-16 bg-white/10",
         )}
       >
         {icon}

@@ -11,6 +11,15 @@ export function getCurrencySymbol(currency: string): string {
   }
 }
 
+export function formatCurrency(amount: number): string {
+  return new Intl.NumberFormat("en-NG", {
+    style: "currency",
+    currency: "NGN",
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 0,
+  }).format(amount);
+}
+
 export function formatAmount(amount: number | undefined): string {
   return (
     amount?.toLocaleString(undefined, {

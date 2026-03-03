@@ -9,13 +9,13 @@ import TableBodyRow from "@/components/table/TableBodyRow";
 import TableBodyCol from "@/components/table/TableBodyCol";
 import TablePagination2 from "@/components/table/TablePagination2";
 import { useThrottledCallback } from "@mantine/hooks";
-import InputSearch from "../input-search";
+import InputSearch from "../reusables/input-search";
 import useTableDataController from "./useTableDataController";
-import CurrencyAmount from "../currency-amount";
-import DateFormatterToText from "../date-formatter-to-text";
+import CurrencyAmount from "../reusables/currency-amount";
 import { getObjectKeyData } from "@/lib/get-object-key-data";
-import InputSelectV1 from "../input-select-v1";
+import InputSelectV1 from "../reusables/input-select-v1";
 import { cn } from "@/lib/utils";
+import DateFormatterToText from "../reusables/date-formatter-to-text";
 
 export type TableColProps = {
   name: string;
@@ -86,7 +86,7 @@ const AutoTableApi = ({
 
   const throttledSetValue = useThrottledCallback(
     (value) => onSearch(value),
-    500
+    500,
   );
 
   return (
