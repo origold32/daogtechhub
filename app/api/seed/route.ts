@@ -5,8 +5,14 @@
 
 import { NextResponse } from "next/server";
 import { createServiceRoleClient } from "@/supabase/server";
+import type { Database } from "@/types/database";
 
-const GADGETS = [
+type GadgetInsert     = Database["public"]["Tables"]["gadgets"]["Insert"];
+type JerseyInsert     = Database["public"]["Tables"]["jerseys"]["Insert"];
+type CarInsert        = Database["public"]["Tables"]["cars"]["Insert"];
+type RealEstateInsert = Database["public"]["Tables"]["real_estates"]["Insert"];
+
+const GADGETS: GadgetInsert[] = [
   {
     id: "g-001",
     name: "iPhone 15 Pro Max",
@@ -113,7 +119,7 @@ const GADGETS = [
   },
 ];
 
-const JERSEYS = [
+const JERSEYS: JerseyInsert[] = [
   {
     id: "j-001",
     name: "Real Madrid Home 2024/25",
@@ -228,7 +234,7 @@ const JERSEYS = [
   },
 ];
 
-const CARS = [
+const CARS: CarInsert[] = [
   {
     id: "c-001",
     name: "Toyota Camry 2022",
@@ -359,7 +365,7 @@ const CARS = [
   },
 ];
 
-const REAL_ESTATES = [
+const REAL_ESTATES: RealEstateInsert[] = [
   {
     id: "re-001",
     name: "3 Bedroom Flat — Lekki Phase 1",
