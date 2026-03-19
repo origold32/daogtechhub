@@ -1,30 +1,27 @@
+export const dynamic = "force-dynamic";
 // app/(auth)/auth/callback/route.ts
-// Single canonical handler for ALL Supabase auth redirects.
-//
-// Handles:
-//  1. PKCE code exchange → ?code=...           (OAuth: Google/Facebook)
-//  2. OTP token hash    → ?token_hash=...&type= (magic-link email clicks)
-//
-// Supabase Dashboard → Auth → URL Configuration:
-//   Site URL:      http://localhost:3232
-//   Redirect URLs: http://localhost:3232/auth/callback
+// Handles ALL Supabase auth redirects:
+//   token_hash → magic links / OTP email clicks (opens in any browser, no PKCE needed)
+//   code        → OAuth (Google, Facebook) PKCE exchange
 
 import { NextRequest, NextResponse } from "next/server";
 
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
 
-  const code       = searchParams.get("code");
-  const tokenHash  = searchParams.get("token_hash");
-  const type       = searchParams.get("type") ?? "email";
-  const next       = searchParams.get("next") ?? "/profile";
-  const errorParam = searchParams.get("error");
-  const errorDesc  = searchParams.get("error_description");
+  const code        = searchParams.get("code");
+  const tokenHash   = searchParams.get("token_hash");
+  const type        = searchParams.get("type") ?? "email";
+  const next        = searchParams.get("next") ?? "/profile";
+  const errorParam  = searchParams.get("error");
+  const errorDesc   = searchParams.get("error_description");
 
-  // Surface provider-level errors (OAuth denied, etc.)
+  // ── Provider-level errors (OAuth denied, etc.) ────────────────────────────
   if (errorParam) {
     const friendly = toFriendlyCallbackError(errorDesc ?? errorParam);
-    return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(friendly)}`);
+    return NextResponse.redirect(
+      `${origin}/auth?error=${encodeURIComponent(friendly)}`
+    );
   }
 
   if (!code && !tokenHash) {
@@ -35,12 +32,13 @@ export async function GET(request: NextRequest) {
 
   if (!process.env.NEXT_PUBLIC_SUPABASE_URL || !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY) {
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent("Auth is not configured — check your .env.local.")}`
+      `${origin}/auth?error=${encodeURIComponent("Auth is not configured.")}`
     );
   }
 
   try {
-    const { createServerSupabaseClient, createServiceRoleClient } = await import("@/supabase/server");
+    const { createServerSupabaseClient, createServiceRoleClient } =
+      await import("@/supabase/server");
     const supabase = await createServerSupabaseClient();
 
     let userId:    string | undefined;
@@ -48,33 +46,46 @@ export async function GET(request: NextRequest) {
     let userPhone: string | null | undefined;
     let userMeta:  Record<string, any> = {};
 
-    // Path A: PKCE code exchange (OAuth, email sign-up)
-    if (code) {
-      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+    // ── Path A: token_hash — magic links and OTP email clicks ────────────────
+    // This is the preferred path. It works in any browser because it doesn't
+    // rely on a PKCE code verifier cookie from the originating session.
+    if (tokenHash) {
+      const otpType = (
+        type === "signup"       ? "signup"       :
+        type === "invite"       ? "invite"       :
+        type === "recovery"     ? "recovery"     :
+        type === "email_change" ? "email_change" :
+        type === "magiclink"    ? "magiclink"    : "email"
+      ) as "email" | "signup" | "invite" | "magiclink" | "email_change" | "recovery";
+
+      const { data, error } = await supabase.auth.verifyOtp({
+        token_hash: tokenHash,
+        type: otpType,
+      });
+
       if (error || !data?.user) {
-        const msg = toFriendlyCallbackError(error?.message ?? "Authentication failed.");
-        return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(msg)}`);
+        const msg = toFriendlyCallbackError(error?.message ?? "Invalid or expired link.");
+        return NextResponse.redirect(
+          `${origin}/auth?error=${encodeURIComponent(msg)}`
+        );
       }
+
       userId    = data.user.id;
       userEmail = data.user.email;
       userPhone = data.user.phone;
       userMeta  = data.user.user_metadata ?? {};
     }
 
-    // Path B: token_hash (magic-link clicks, OTP email)
-    if (tokenHash && !code) {
-      const otpType = (
-        type === "signup"       ? "signup"       :
-        type === "invite"       ? "invite"       :
-        type === "email_change" ? "email_change" :
-        type === "magiclink"    ? "magiclink"    : "email"
-      ) as "email" | "signup" | "invite" | "magiclink" | "email_change";
-
-      const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: otpType });
+    // ── Path B: code — OAuth PKCE exchange (Google, Facebook) ────────────────
+    // Only used for OAuth. Magic links never reach this path.
+    if (code && !tokenHash) {
+      const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
       if (error || !data?.user) {
-        const msg = toFriendlyCallbackError(error?.message ?? "Invalid or expired link.");
-        return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent(msg)}`);
+        const msg = toFriendlyCallbackError(error?.message ?? "Authentication failed.");
+        return NextResponse.redirect(
+          `${origin}/auth?error=${encodeURIComponent(msg)}`
+        );
       }
 
       userId    = data.user.id;
@@ -89,7 +100,7 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Upsert profile (belt-and-suspenders alongside the DB trigger)
+    // ── Upsert profile ────────────────────────────────────────────────────────
     try {
       const rawName   = userMeta.full_name ?? userMeta.name ?? userEmail?.split("@")[0] ?? "User";
       const nameParts = rawName.trim().split(/\s+/);
@@ -108,12 +119,14 @@ export async function GET(request: NextRequest) {
         { onConflict: "id", ignoreDuplicates: false }
       );
     } catch (profileErr) {
-      // Non-fatal — DB trigger is the primary path
       console.warn("[callback] profile upsert:", (profileErr as Error).message);
     }
 
-    const redirectPath = next.startsWith("/") ? next : "/";
-    return NextResponse.redirect(`${origin}${redirectPath}`);
+    // ── Redirect to verifying page (shows smooth animation) ──────────────────
+    const redirectPath = next.startsWith("/") ? next : "/profile";
+    return NextResponse.redirect(
+      `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`
+    );
 
   } catch (err) {
     console.error("[auth/callback]", err);
@@ -130,7 +143,8 @@ function toFriendlyCallbackError(raw: string): string {
   if (m.includes("invalid") && m.includes("code"))       return "Invalid authentication code. Please try signing in again.";
   if (m.includes("email link is invalid"))                return "That sign-in link is invalid or has already been used.";
   if (m.includes("access denied"))                        return "Access was denied. Please try again.";
-  if (m.includes("pkce") || m.includes("code verifier")) return "Session mismatch — please clear cookies and try again.";
-  if (m.includes("redirect_uri"))                         return "Redirect URL mismatch — contact support.";
+  if (m.includes("pkce") || m.includes("code verifier")) return "Session expired — please request a new sign-in link.";
+  if (m.includes("redirect_uri"))                         return "Redirect URL mismatch — please contact support.";
+  if (m.includes("otp"))                                  return "Your sign-in code has expired. Please request a new one.";
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
