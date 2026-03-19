@@ -6,7 +6,7 @@
 
 type RequestConfig = {
   url: string;
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "get" | "post" | "put" | "patch" | "delete";
   headers?: Record<string, string>;
   data?: any;
   signal?: AbortSignal;
@@ -40,7 +40,7 @@ async function attachAuthHeaders(headers: Record<string, string> = {}) {
 }
 
 async function doFetch(config: RequestConfig, retry = true): Promise<any> {
-  const method = config.method ?? "GET";
+  const method = (config.method ?? "GET").toUpperCase() as "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
   const isFormData = typeof FormData !== "undefined" && config.data instanceof FormData;
 
   const headers = await attachAuthHeaders(
