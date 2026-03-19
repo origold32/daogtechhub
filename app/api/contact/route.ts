@@ -7,10 +7,9 @@ import { Resend } from "resend";
 import { createServerSupabaseClient } from "@/supabase/server";
 import { ok, badRequest, serverError } from "@/lib/api-response";
 
-const resend = new Resend(process.env.RESEND_API_KEY);
-
 export async function POST(req: NextRequest) {
   try {
+    const resend = new Resend(process.env.RESEND_API_KEY);
     const { name, email, product, message } = await req.json();
 
     if (!name || !email || !product || !message) {
