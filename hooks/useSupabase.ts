@@ -272,10 +272,11 @@ export function useCartSync() {
         unit_price:       i.price,
         quantity:         i.quantity,
       }));
-      supabase
-        .from("cart_items")
-        .upsert(rows, { onConflict: "user_id,product_id" })
-        .catch(() => {}); // best-effort
+      Promise.resolve(
+        supabase
+          .from("cart_items")
+          .upsert(rows, { onConflict: "user_id,product_id" })
+      ).catch(() => {}); // best-effort
     }
   }, [user, addItem]);
 }
