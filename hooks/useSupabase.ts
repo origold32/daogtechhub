@@ -238,28 +238,28 @@ export function useCartSync() {
     const localItems = useCartStore.getState().items;
 
     // Pull server cart → merge into local (server wins for quantity)
-    supabase
-      .from("cart_items")
-      .select("*")
-      .eq("user_id", user.id)
-      .then(({ data: serverItems }) => {
-        serverItems?.forEach((s: any) => {
-          if (!localItems.some((l) => l.id === s.product_id)) {
-            addItem({
-              id:       s.product_id,
-              name:     s.product_name,
-              price:    s.unit_price,
-              image:    s.product_image,
-              category: s.product_category,
-            });
-            // addItem defaults to qty 1; sync the real server quantity if different
-            if (s.quantity > 1) {
-              useCartStore.getState().updateQuantity(s.product_id, s.quantity);
-            }
+    Promise.resolve(
+      supabase
+        .from("cart_items")
+        .select("*")
+        .eq("user_id", user.id)
+    ).then(({ data: serverItems }) => {
+      serverItems?.forEach((s: any) => {
+        if (!localItems.some((l) => l.id === s.product_id)) {
+          addItem({
+            id:       s.product_id,
+            name:     s.product_name,
+            price:    s.unit_price,
+            image:    s.product_image,
+            category: s.product_category,
+          });
+          // addItem defaults to qty 1; sync the real server quantity if different
+          if (s.quantity > 1) {
+            useCartStore.getState().updateQuantity(s.product_id, s.quantity);
           }
-        });
-      })
-      .catch(() => {}); // silently ignore — cart sync is best-effort
+        }
+      });
+    }).catch(() => {}); // silently ignore — cart sync is best-effort
 
     // Push local items → server
     if (localItems.length > 0) {
