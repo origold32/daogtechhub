@@ -32,13 +32,14 @@ export default async function makeApiRequest({
 }: MakeApiRequest): Promise<any> {
   try {
     const { headers, ...restConfig } = config;
+    const signal = restConfig.signal ?? undefined;
 
     let resp = await axiosBaseInstance({
       url,
       method: type,
       ...(data instanceof FormData ? { data } : { data: { ...data } }),
       headers,
-      ...restConfig,
+      ...(signal ? { signal } : {}),
     });
 
     //

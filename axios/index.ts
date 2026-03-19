@@ -9,7 +9,7 @@ type RequestConfig = {
   method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "get" | "post" | "put" | "patch" | "delete";
   headers?: Record<string, string>;
   data?: any;
-  signal?: AbortSignal;
+  signal?: AbortSignal | null;
 };
 
 let _supabase: Awaited<ReturnType<typeof import("@/supabase/client").createClient>> | null = null;
