@@ -15,9 +15,7 @@ export async function GET() {
     const auth = await requireAuth();
     if (auth.error) return auth.error;
 
-    // requireAuth already fetches the profile — reuse it with an explicit
-    // type annotation so TypeScript knows the shape regardless of how the
-    // query builder infers it at the call site.
+    // auth.profile is ProfileRow | null — typed correctly in auth-guard.ts
     const p: ProfileRow | null = auth.profile;
     if (!p) return notFound("Profile");
 
@@ -77,8 +75,6 @@ export async function PATCH(req: NextRequest) {
     if (country      !== undefined) update.country       = country;
     if (postalCode   !== undefined) update.postal_code   = postalCode;
 
-    // .select() without .single() returns an array — take the first element
-    // with an explicit type annotation to bypass the query builder's inference.
     const { data, error: uErr } = await supabase!
       .from("profiles")
       .update(update)

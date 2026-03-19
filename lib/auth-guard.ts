@@ -6,7 +6,9 @@
 
 import { createServerSupabaseClient } from "@/supabase/server";
 import { unauthorized, forbidden } from "./api-response";
-import type { UserRole } from "@/types/database";
+import type { Database, UserRole } from "@/types/database";
+
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
 export async function requireAuth() {
   const supabase = await createServerSupabaseClient();
@@ -19,11 +21,15 @@ export async function requireAuth() {
     return { user: null, supabase, profile: null, error: unauthorized() } as const;
   }
 
-  const { data: profile } = await supabase
+  // .select() returns an array — avoids the .single() inference breakage
+  // introduced in @supabase/postgrest-js bundled with supabase-js v2.99+
+  // where .single() on hand-written Database types collapses to never.
+  const { data } = await supabase
     .from("profiles")
     .select("*")
-    .eq("id", user.id)
-    .single();
+    .eq("id", user.id);
+
+  const profile: ProfileRow | null = data?.[0] ?? null;
 
   return { user, supabase, profile, error: null } as const;
 }
