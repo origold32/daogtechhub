@@ -5,6 +5,11 @@
 import { NextRequest } from "next/server";
 import { ok, created, badRequest, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type OrderItemInsert = Database["public"]["Tables"]["order_items"]["Insert"];
+type ProductCategory = OrderItemInsert["product_category"];
+const ALLOWED_PRODUCT_CATEGORIES: ProductCategory[] = ["gadget", "jersey", "car", "realestate"];
 
 export async function GET(req: NextRequest) {
   try {
@@ -42,7 +47,7 @@ export async function POST(req: NextRequest) {
     const { items, paymentMethod, paymentReference, notes } = body as {
       items: Array<{
         productId: string;
-        productCategory: string;
+        productCategory: ProductCategory;
         productName: string;
         productImage: string;
         unitPrice: number;
@@ -55,6 +60,13 @@ export async function POST(req: NextRequest) {
 
     if (!items || items.length === 0) {
       return badRequest("Order must contain at least one item");
+    }
+
+    const invalidCategory = items.find(
+      (item) => !ALLOWED_PRODUCT_CATEGORIES.includes(item.productCategory)
+    );
+    if (invalidCategory) {
+      return badRequest(`Invalid product category: ${invalidCategory.productCategory}`);
     }
 
     const totalAmount = items.reduce(
@@ -78,7 +90,7 @@ export async function POST(req: NextRequest) {
 
     if (orderError) return serverError(orderError);
 
-    const orderItems = items.map((item) => ({
+    const orderItems: OrderItemInsert[] = items.map((item) => ({
       order_id: order.id,
       product_id: item.productId,
       product_category: item.productCategory,
