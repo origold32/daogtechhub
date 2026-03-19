@@ -4,16 +4,20 @@ import { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/supabase/server";
 import { created, badRequest, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type EstateType = Database["public"]["Tables"]["real_estates"]["Row"]["type"];
+const VALID_TYPES: EstateType[] = ["house", "land", "apartment", "commercial"];
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const { searchParams } = new URL(req.url);
 
-    const search = searchParams.get("search") ?? "";
-    const type = searchParams.get("type") ?? "all";
-    const location = searchParams.get("location") ?? "all";
-    const size = searchParams.get("size") ?? "all";
+    const search    = searchParams.get("search")   ?? "";
+    const typeParam = searchParams.get("type")     ?? "all";
+    const location  = searchParams.get("location") ?? "all";
+    const size      = searchParams.get("size")     ?? "all";
     const { page, pageSize, from, to } = parsePagination(searchParams);
 
     let query = supabase
@@ -26,7 +30,9 @@ export async function GET(req: NextRequest) {
     if (search) {
       query = query.or(`name.ilike.%${search}%,location.ilike.%${search}%`);
     }
-    if (type !== "all") query = query.eq("type", type);
+
+    const type = VALID_TYPES.find((t) => t === typeParam);
+    if (type)              query = query.eq("type", type);
     if (location !== "all") query = query.ilike("location", `%${location}%`);
 
     const { data, error, count } = await query;
@@ -35,7 +41,6 @@ export async function GET(req: NextRequest) {
       return withMeta([], { page, pageSize, total: 0, totalPages: 0 });
     }
 
-    // Size filter done in-memory since it's a range check on a text field
     const filtered =
       size !== "all"
         ? (data ?? []).filter((e) => {
@@ -72,9 +77,9 @@ export async function POST(req: NextRequest) {
       .insert({
         name, type, location, price,
         image_url: imageUrl, description, size,
-        bedrooms: bedrooms ?? null,
+        bedrooms:  bedrooms  ?? null,
         bathrooms: bathrooms ?? null,
-        features: features ?? [],
+        features:  features  ?? [],
         is_available: true,
         seller_id: auth.user!.id,
       })

@@ -4,15 +4,21 @@ import { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/supabase/server";
 import { created, badRequest, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type JerseyType     = Database["public"]["Tables"]["jerseys"]["Row"]["type"];
+type JerseyCategory = Database["public"]["Tables"]["jerseys"]["Row"]["category"];
+const VALID_TYPES:      JerseyType[]     = ["club", "country", "nfl", "basketball", "retro"];
+const VALID_CATEGORIES: JerseyCategory[] = ["current", "retro", "special"];
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const { searchParams } = new URL(req.url);
 
-    const search = searchParams.get("search") ?? "";
-    const type = searchParams.get("type") ?? "all";
-    const category = searchParams.get("category") ?? "all";
+    const search       = searchParams.get("search")   ?? "";
+    const typeParam    = searchParams.get("type")     ?? "all";
+    const categoryParam = searchParams.get("category") ?? "all";
     const { page, pageSize, from, to } = parsePagination(searchParams);
 
     let query = supabase
@@ -25,8 +31,11 @@ export async function GET(req: NextRequest) {
     if (search) {
       query = query.or(`name.ilike.%${search}%,team.ilike.%${search}%`);
     }
-    if (type !== "all") query = query.eq("type", type);
-    if (category !== "all") query = query.eq("category", category);
+
+    const type     = VALID_TYPES.find((t) => t === typeParam);
+    const category = VALID_CATEGORIES.find((c) => c === categoryParam);
+    if (type)     query = query.eq("type", type);
+    if (category) query = query.eq("category", category);
 
     const { data, error, count } = await query;
     if (error) {
@@ -35,8 +44,7 @@ export async function GET(req: NextRequest) {
     }
 
     return withMeta(data ?? [], {
-      page,
-      pageSize,
+      page, pageSize,
       total: count ?? 0,
       totalPages: Math.ceil((count ?? 0) / pageSize),
     });

@@ -1,10 +1,17 @@
 // app/api/recommendations/route.ts
-// AI-powered product recommendations using collaborative filtering.
-// GET /api/recommendations?category=gadgets&productId=xxx&userId=xxx
+// GET /api/recommendations?category=gadgets&productId=xxx
 
 import { NextRequest } from "next/server";
 import { ok, serverError } from "@/lib/api-response";
 import { createServerSupabaseClient } from "@/supabase/server";
+
+// Map URL category param to actual Supabase table names
+const TABLE_MAP: Record<string, "gadgets" | "jerseys" | "cars" | "real_estates"> = {
+  gadgets:    "gadgets",
+  jerseys:    "jerseys",
+  cars:       "cars",
+  realestate: "real_estates",
+};
 
 export async function GET(req: NextRequest) {
   try {
@@ -14,36 +21,28 @@ export async function GET(req: NextRequest) {
     const productId = searchParams.get("productId");
     const limit     = Math.min(parseInt(searchParams.get("limit") ?? "6"), 12);
 
-    // Table map
-    const TABLE_MAP: Record<string, string> = {
-      gadgets: "gadgets", jerseys: "jerseys", cars: "cars", realestate: "realestate",
-    };
     const table = TABLE_MAP[category] ?? "gadgets";
 
-    // Strategy 1: If we have a productId, fetch "similar" items by matching fields
     if (productId) {
-      // Get the reference product
       const { data: ref } = await supabase.from(table).select("*").eq("id", productId).single();
 
       if (ref) {
-        let query = supabase.from(table).select("*").eq("is_active", true).neq("id", productId).limit(limit);
+        // ref is typed as the full row — .type and .brand exist on gadgets/jerseys/cars
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const r = ref as any;
+        let query = supabase.from(table).select("*").neq("id", productId).limit(limit);
 
-        // Match by type/brand/category for more relevant recommendations
-        if (ref.type)  query = query.eq("type", ref.type);
-        else if (ref.brand) query = query.eq("brand", ref.brand);
+        if (r.type)       query = query.eq("type" as never, r.type);
+        else if (r.brand) query = query.eq("brand" as never, r.brand);
 
         const { data: similar } = await query;
-        if (similar && similar.length >= 3) {
-          return ok(similar, "Similar products");
-        }
+        if (similar && similar.length >= 3) return ok(similar, "Similar products");
       }
     }
 
-    // Strategy 2: Trending — most recently added products in category
     const { data: trending } = await supabase
       .from(table)
       .select("*")
-      .eq("is_active", true)
       .order("created_at", { ascending: false })
       .limit(limit);
 

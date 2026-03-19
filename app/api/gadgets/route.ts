@@ -6,15 +6,19 @@ import { NextRequest } from "next/server";
 import { createServerSupabaseClient } from "@/supabase/server";
 import { ok, created, badRequest, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type GadgetType = Database["public"]["Tables"]["gadgets"]["Row"]["type"];
+const VALID_TYPES: GadgetType[] = ["phone", "laptop", "game", "tablet", "accessory"];
 
 export async function GET(req: NextRequest) {
   try {
     const supabase = await createServerSupabaseClient();
     const { searchParams } = new URL(req.url);
 
-    const search = searchParams.get("search") ?? "";
-    const type = searchParams.get("type") ?? "all";
-    const brand = searchParams.get("brand") ?? "all";
+    const search    = searchParams.get("search") ?? "";
+    const typeParam = searchParams.get("type")   ?? "all";
+    const brand     = searchParams.get("brand")  ?? "all";
     const { page, pageSize, from, to } = parsePagination(searchParams);
 
     let query = supabase
@@ -29,7 +33,10 @@ export async function GET(req: NextRequest) {
         `name.ilike.%${search}%,brand.ilike.%${search}%,description.ilike.%${search}%`
       );
     }
-    if (type !== "all") query = query.eq("type", type);
+
+    // Validate against the GadgetType union before passing to .eq()
+    const type = VALID_TYPES.find((t) => t === typeParam);
+    if (type) query = query.eq("type", type);
     if (brand !== "all") query = query.ilike("brand", brand);
 
     const { data, error, count } = await query;
