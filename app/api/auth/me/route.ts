@@ -6,24 +6,24 @@
 import { NextRequest } from "next/server";
 import { ok, serverError, notFound } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"];
 
 export async function GET() {
   try {
-    const { user, supabase, error } = await requireAuth();
-    if (error) return error;
+    const auth = await requireAuth();
+    if (auth.error) return auth.error;
 
-    // select("*") infers the full ProfileRow type from the Database definition.
-    // .returns<T>() must not be chained with .single() — combining an array
-    // generic with single() breaks type resolution and collapses the result to never.
-    const { data: p, error: pErr } = await supabase!
-      .from("profiles")
-      .select("*")
-      .eq("id", user!.id)
-      .single();
+    // requireAuth already fetches the profile — reuse it with an explicit
+    // type annotation so TypeScript knows the shape regardless of how the
+    // query builder infers it at the call site.
+    const p: ProfileRow | null = auth.profile;
+    if (!p) return notFound("Profile");
 
-    if (pErr || !p) return notFound("Profile");
+    const supabase = auth.supabase;
+    const user     = auth.user;
 
-    // Parallel fetch for counts (non-blocking if tables don't exist yet)
     const [ordersRes, wishlistRes, cartRes] = await Promise.allSettled([
       supabase!.from("orders")    .select("id", { count: "exact", head: true }).eq("user_id", user!.id),
       supabase!.from("wishlists") .select("id", { count: "exact", head: true }).eq("user_id", user!.id),
@@ -77,14 +77,18 @@ export async function PATCH(req: NextRequest) {
     if (country      !== undefined) update.country       = country;
     if (postalCode   !== undefined) update.postal_code   = postalCode;
 
-    const { data: p, error: uErr } = await supabase!
+    // .select() without .single() returns an array — take the first element
+    // with an explicit type annotation to bypass the query builder's inference.
+    const { data, error: uErr } = await supabase!
       .from("profiles")
       .update(update)
       .eq("id", user!.id)
-      .select()
-      .single();
+      .select();
 
     if (uErr) return serverError(uErr.message);
+
+    const p: ProfileRow | undefined = data?.[0];
+    if (!p) return serverError("Profile update failed");
 
     return ok({
       id:           p.id,
