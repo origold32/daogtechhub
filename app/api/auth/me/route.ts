@@ -12,7 +12,9 @@ export async function GET() {
     const { user, supabase, error } = await requireAuth();
     if (error) return error;
 
-    // Single query — avoid double fetch (requireAuth already has profile)
+    // select("*") infers the full ProfileRow type from the Database definition.
+    // .returns<T>() must not be chained with .single() — combining an array
+    // generic with single() breaks type resolution and collapses the result to never.
     const { data: p, error: pErr } = await supabase!
       .from("profiles")
       .select("*")
@@ -43,7 +45,6 @@ export async function GET() {
       country:      p.country       ?? null,
       postalCode:   p.postal_code   ?? null,
       createdAt:    p.created_at,
-      // Handy counts for the profile overview tab
       _counts: {
         orders:   ordersRes.status   === "fulfilled" ? (ordersRes.value.count   ?? 0) : 0,
         wishlist: wishlistRes.status === "fulfilled" ? (wishlistRes.value.count ?? 0) : 0,
@@ -64,7 +65,7 @@ export async function PATCH(req: NextRequest) {
       addressLine1, addressLine2, city, state, country, postalCode,
     } = body;
 
-    const update: Record<string, any> = { updated_at: new Date().toISOString() };
+    const update: Record<string, unknown> = { updated_at: new Date().toISOString() };
     if (firstName    !== undefined) update.first_name    = firstName;
     if (lastName     !== undefined) update.last_name     = lastName;
     if (phone        !== undefined) update.phone         = phone;
@@ -86,12 +87,19 @@ export async function PATCH(req: NextRequest) {
     if (uErr) return serverError(uErr.message);
 
     return ok({
-      id: p.id, firstName: p.first_name, lastName: p.last_name,
-      email: p.email, phone: p.phone ?? null, avatar: p.avatar_url ?? null,
-      role: p.role,
-      addressLine1: p.address_line1 ?? null, addressLine2: p.address_line2 ?? null,
-      city: p.city ?? null, state: p.state ?? null,
-      country: p.country ?? null, postalCode: p.postal_code ?? null,
+      id:           p.id,
+      firstName:    p.first_name,
+      lastName:     p.last_name,
+      email:        p.email,
+      phone:        p.phone        ?? null,
+      avatar:       p.avatar_url   ?? null,
+      role:         p.role,
+      addressLine1: p.address_line1 ?? null,
+      addressLine2: p.address_line2 ?? null,
+      city:         p.city          ?? null,
+      state:        p.state         ?? null,
+      country:      p.country       ?? null,
+      postalCode:   p.postal_code   ?? null,
     }, "Profile updated");
   } catch (err) { return serverError(err); }
 }
