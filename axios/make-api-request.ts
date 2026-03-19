@@ -21,7 +21,7 @@ interface MakeApiRequest {
   type: apiMethod;
   url: string;
   data?: Partial<Record<string, any>>;
-  config?: RequestInit & { headers?: Record<string, string> };
+  config?: Omit<RequestInit, "method"> & { headers?: Record<string, string> };
 }
 
 export default async function makeApiRequest({
@@ -31,11 +31,14 @@ export default async function makeApiRequest({
   config = {},
 }: MakeApiRequest): Promise<any> {
   try {
+    const { headers, ...restConfig } = config;
+
     let resp = await axiosBaseInstance({
       url,
       method: type,
       ...(data instanceof FormData ? { data } : { data: { ...data } }),
-      ...config,
+      headers,
+      ...restConfig,
     });
 
     //
