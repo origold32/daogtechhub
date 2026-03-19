@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/auth/me/route.ts
 // GET    → Full profile with cart, wishlist, and order counts
 // PATCH  → Update editable profile fields

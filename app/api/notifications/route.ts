@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/notifications/route.ts — GET user notifications
 import { ok, serverError } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
@@ -18,3 +19,4 @@ export async function GET() {
     return ok(data ?? []);
   } catch (err) { return serverError(err); }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/admin/swaps/route.ts
 // GET   → All swap requests with filters (admin)
 // PATCH → Update swap status (admin)

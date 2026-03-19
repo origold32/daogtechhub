@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/contact/route.ts
 // POST → Saves enquiry to Supabase AND sends email via Resend
 

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/admin/users/route.ts
 // GET  → List all profiles (admin only)
 

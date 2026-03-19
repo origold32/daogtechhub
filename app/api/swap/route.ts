@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/swap/route.ts
 // POST → Submit a new swap request (authenticated users)
 // GET  → List user's own swap requests
@@ -82,3 +83,4 @@ export async function POST(req: NextRequest) {
     return serverError(err);
   }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/cars/route.ts
 
 import { NextRequest } from "next/server";
@@ -79,3 +80,4 @@ export async function POST(req: NextRequest) {
     return serverError(err);
   }
 }
+

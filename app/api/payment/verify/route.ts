@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/payment/verify/route.ts
 // Called from the /payment/callback page after Paystack redirect.
 // Verifies with Paystack API (never trusts frontend), updates order, creates receipt.
@@ -187,3 +188,4 @@ async function sendReceiptEmail(opts: {
     }),
   });
 }
+

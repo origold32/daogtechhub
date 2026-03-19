@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/payment/initialize/route.ts
 // Creates a Paystack transaction and returns the hosted payment URL.
 // ORDER is created BEFORE payment so the reference is tied to a real DB row.
@@ -111,3 +112,4 @@ export async function POST(req: NextRequest) {
     return serverError(err);
   }
 }
+

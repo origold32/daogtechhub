@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/admin/stats/route.ts
 // GET → Dashboard statistics (admin only)
 

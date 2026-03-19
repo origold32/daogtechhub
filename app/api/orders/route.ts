@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/orders/route.ts
 // GET  → List the authenticated user's orders
 // POST → Create a new order (from cart items)
@@ -115,3 +116,4 @@ export async function POST(req: NextRequest) {
     return serverError(err);
   }
 }
+

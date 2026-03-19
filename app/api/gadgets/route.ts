@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/gadgets/route.ts
 // GET  → List gadgets with search, type, brand filters + pagination
 // POST → Create gadget (admin only)

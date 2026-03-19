@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/realestate/route.ts
 
 import { NextRequest } from "next/server";

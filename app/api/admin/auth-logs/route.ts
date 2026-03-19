@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/admin/auth-logs/route.ts
 // GET  → Returns auth event logs for admin dashboard
 // POST → Manually log an auth event (called from server actions)
@@ -37,3 +38,4 @@ export async function GET(req: NextRequest) {
     return serverError(err);
   }
 }
+

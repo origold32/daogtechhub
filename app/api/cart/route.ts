@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/cart/route.ts
 // Syncs the Zustand client cart with Supabase for persistence across devices.
 // GET    → Fetch server cart
@@ -95,3 +96,4 @@ export async function DELETE() {
     return serverError(err);
   }
 }
+

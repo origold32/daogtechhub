@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/wishlist/route.ts
 // GET    → Fetch user's saved wishlist items with product details
 // POST   → Add item to wishlist
@@ -82,3 +83,4 @@ export async function DELETE(req: NextRequest) {
     }
   } catch (err) { return serverError(err); }
 }
+

@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/receipts/route.ts — GET all user receipts
 import { ok, serverError } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
@@ -17,3 +18,4 @@ export async function GET() {
     return ok(data ?? []);
   } catch (err) { return serverError(err); }
 }
+

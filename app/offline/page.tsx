@@ -1,3 +1,5 @@
+"use client";
+
 // app/offline/page.tsx — Shown by service worker when offline
 export default function OfflinePage() {
   return (
@@ -25,3 +27,4 @@ export default function OfflinePage() {
     </div>
   );
 }
+

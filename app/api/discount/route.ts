@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/discount/route.ts
 // POST → Validate and apply a discount code
 // GET  → Admin: list all discount codes
@@ -66,3 +67,4 @@ export async function GET(req: NextRequest) {
     return ok(data ?? []);
   } catch (err) { return serverError(err); }
 }
+

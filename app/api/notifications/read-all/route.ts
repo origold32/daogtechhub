@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/notifications/read-all/route.ts — mark all notifications read
 import { ok, serverError } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
@@ -16,3 +17,4 @@ export async function PATCH() {
     return ok({ updated: true });
   } catch (err) { return serverError(err); }
 }
+

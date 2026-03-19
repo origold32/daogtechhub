@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/recommendations/route.ts
 // GET /api/recommendations?category=gadgets&productId=xxx
 

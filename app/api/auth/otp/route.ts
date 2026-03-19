@@ -1,3 +1,4 @@
+export const dynamic = "force-dynamic";
 // app/api/auth/otp/route.ts
 // Sends a passwordless OTP / magic-link via Supabase Auth.
 // Handles both Sign In (existing users) and Sign Up (new users — same flow).
@@ -150,3 +151,4 @@ export async function POST(req: NextRequest) {
     );
   }
 }
+
