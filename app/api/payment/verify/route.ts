@@ -5,10 +5,31 @@ import { NextRequest } from "next/server";
 import { ok, badRequest, serverError } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
 import { createServiceRoleClient } from "@/supabase/server";
+import type { Database } from "@/types/database";
+
+type ProfileRow = Database["public"]["Tables"]["profiles"]["Row"] | null;
+
+function buildCustomerName(user: any, profile: ProfileRow) {
+  const meta = (user?.user_metadata ?? {}) as {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+  };
+
+  const fromProfile = [profile?.first_name, profile?.last_name].filter(Boolean).join(" ").trim();
+  if (fromProfile) return fromProfile;
+
+  if (meta.full_name?.trim()) return meta.full_name.trim();
+
+  const fromMeta = [meta.first_name, meta.last_name].filter(Boolean).join(" ").trim();
+  if (fromMeta) return fromMeta;
+
+  return (user?.email as string | undefined)?.split("@")[0] ?? "Customer";
+}
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, error } = await requireAuth();
+    const { user, profile, error } = await requireAuth();
     if (error) return error;
 
     const { reference } = await req.json() as { reference: string };
@@ -75,7 +96,7 @@ export async function POST(req: NextRequest) {
           user_id:            user!.id,
           receipt_number:     receiptNum,
           payment_reference:  reference,
-          customer_name:      meta.customer_name ?? `${user!.firstName ?? ""} ${user!.lastName ?? ""}`.trim(),
+          customer_name:      meta.customer_name ?? buildCustomerName(user, profile),
           customer_email:     tx.customer?.email ?? user!.email,
           amount_paid:        tx.amount / 100,
           currency:           tx.currency ?? "NGN",
@@ -91,7 +112,7 @@ export async function POST(req: NextRequest) {
         // Send receipt email (non-blocking)
         sendReceiptEmail({
           to:            tx.customer?.email ?? user!.email ?? "",
-          customerName:  meta.customer_name ?? user!.firstName ?? "Customer",
+          customerName:  meta.customer_name ?? buildCustomerName(user, profile),
           receiptNumber: receiptNumber,
           reference,
           amount:        tx.amount / 100,
