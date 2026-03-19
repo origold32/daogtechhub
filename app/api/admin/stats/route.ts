@@ -34,11 +34,17 @@ export async function GET() {
       supabase.from("real_estates").select("*", { count: "exact", head: true }).eq("is_available", true),
     ]);
 
-    // Revenue queries in their own Promise.all so TypeScript correctly infers the row shape
-    const [revenueResult, monthlyRevenueResult] = await Promise.all([
-      supabase.from("orders").select("total_amount").neq("status", "cancelled"),
-      supabase.from("orders").select("total_amount").gte("created_at", startOfMonth).neq("status", "cancelled"),
-    ]);
+    // Sequential awaits give TypeScript full independent type inference per query
+    const revenueResult = await supabase
+      .from("orders")
+      .select("total_amount")
+      .neq("status", "cancelled");
+
+    const monthlyRevenueResult = await supabase
+      .from("orders")
+      .select("total_amount")
+      .gte("created_at", startOfMonth)
+      .neq("status", "cancelled");
 
     const totalRevenue = (revenueResult.data ?? []).reduce(
       (sum, o) => sum + (o.total_amount ?? 0),
