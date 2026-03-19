@@ -1,6 +1,5 @@
 // axios/make-api-request.ts
 import { axiosBaseInstance } from "@/axios";
-import { AxiosRequestConfig } from "axios";
 
 const apiMethods = {
   GET: "get",
@@ -22,7 +21,7 @@ interface MakeApiRequest {
   type: apiMethod;
   url: string;
   data?: Partial<Record<string, any>>;
-  config?: AxiosRequestConfig;
+  config?: RequestInit & { headers?: Record<string, string> };
 }
 
 export default async function makeApiRequest({
