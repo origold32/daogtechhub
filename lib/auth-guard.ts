@@ -21,15 +21,12 @@ export async function requireAuth() {
     return { user: null, supabase, profile: null, error: unauthorized() } as const;
   }
 
-  // .select() returns an array — avoids the .single() inference breakage
-  // introduced in @supabase/postgrest-js bundled with supabase-js v2.99+
-  // where .single() on hand-written Database types collapses to never.
   const { data } = await supabase
     .from("profiles")
     .select("*")
     .eq("id", user.id);
 
-  const profile: ProfileRow | null = data?.[0] ?? null;
+  const profile: ProfileRow | null = (data as ProfileRow[] | null)?.[0] ?? null;
 
   return { user, supabase, profile, error: null } as const;
 }

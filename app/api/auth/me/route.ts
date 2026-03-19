@@ -15,7 +15,6 @@ export async function GET() {
     const auth = await requireAuth();
     if (auth.error) return auth.error;
 
-    // auth.profile is ProfileRow | null — typed correctly in auth-guard.ts
     const p: ProfileRow | null = auth.profile;
     if (!p) return notFound("Profile");
 
@@ -83,7 +82,7 @@ export async function PATCH(req: NextRequest) {
 
     if (uErr) return serverError(uErr.message);
 
-    const p: ProfileRow | undefined = data?.[0];
+    const p: ProfileRow | undefined = (data as ProfileRow[] | null)?.[0];
     if (!p) return serverError("Profile update failed");
 
     return ok({
