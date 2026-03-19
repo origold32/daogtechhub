@@ -251,8 +251,11 @@ export function useCartSync() {
               price:    s.unit_price,
               image:    s.product_image,
               category: s.product_category,
-              quantity: s.quantity,
             });
+            // addItem defaults to qty 1; sync the real server quantity if different
+            if (s.quantity > 1) {
+              useCartStore.getState().updateQuantity(s.product_id, s.quantity);
+            }
           }
         });
       })
