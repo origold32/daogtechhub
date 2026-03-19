@@ -20,9 +20,12 @@ interface SearchResult {
   category: "gadgets" | "jerseys" | "cars" | "realestate";
 }
 
-interface SmartSearchProps { isOpen: boolean; onClose: () => void; }
+// isOpen / onClose are optional — when omitted the component renders as an
+// inline search bar (used in navbars). When provided it renders as a modal overlay.
+interface SmartSearchProps { isOpen?: boolean; onClose?: () => void; }
 
 export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
+  const isModal = isOpen !== undefined;
   const router = useRouter();
   const [query,   setQuery]   = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
@@ -65,16 +68,88 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
 
   const navigate = (result: SearchResult) => {
     router.push(`/${result.category}/${result.id}`);
-    onClose();
+    onClose?.();
   };
 
   const navigateTo = (href: string) => {
     router.push(href);
-    onClose();
+    onClose?.();
   };
 
-  if (!isOpen) return null;
+  // Modal mode: hide when closed
+  if (isModal && !isOpen) return null;
 
+  // Inline mode — rendered directly inside a navbar; no overlay/backdrop.
+  if (!isModal) {
+    return (
+      <div className="relative w-full">
+        <div className="flex items-center gap-2 px-3 py-2 rounded-xl border border-white/10 bg-white/5 focus-within:border-lilac/40 transition-colors">
+          <Search className="w-4 h-4 text-lilac flex-shrink-0" />
+          <input
+            ref={inputRef}
+            value={query}
+            onChange={(e) => setQuery(e.target.value)}
+            placeholder="Search gadgets, jerseys, cars, properties…"
+            className="flex-1 bg-transparent text-soft-white placeholder-muted-lavender outline-none text-sm"
+          />
+          {loading && (
+            <div className="w-3 h-3 border border-lilac/50 border-t-lilac rounded-full animate-spin flex-shrink-0" />
+          )}
+          {query && !loading && (
+            <button onClick={() => setQuery("")} className="text-muted-lavender hover:text-lilac transition-colors">
+              <X className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
+        <AnimatePresence>
+          {(results.length > 0 || (!loading && query)) && (
+            <motion.div
+              initial={{ opacity: 0, y: -4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0, y: -4 }}
+              className="absolute top-full left-0 right-0 mt-2 rounded-2xl border border-white/10 bg-[#1a0b2e]/95 backdrop-blur overflow-hidden shadow-2xl z-[200]"
+            >
+              <div className="max-h-[320px] overflow-y-auto">
+                {!loading && query && results.length === 0 && (
+                  <div className="p-6 text-center">
+                    <p className="text-muted-lavender text-sm">No results for &quot;{query}&quot;</p>
+                  </div>
+                )}
+                {!loading && results.length > 0 && (
+                  <div className="p-2">
+                    {results.map((r) => (
+                      <button
+                        key={r.id}
+                        onClick={() => navigate(r)}
+                        className="w-full flex items-center gap-3 p-2.5 rounded-xl hover:bg-white/5 transition-colors text-left"
+                      >
+                        <Image
+                          src={r.image ?? "/images/gadgets_phone.jpg"}
+                          alt={r.name}
+                          width={36}
+                          height={36}
+                          className="rounded-lg object-cover flex-shrink-0"
+                          unoptimized
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-soft-white text-sm font-medium line-clamp-1">{r.name}</p>
+                          <p className="text-muted-lavender text-xs capitalize">{r.category}</p>
+                        </div>
+                        <p className="text-lilac text-sm font-bold flex-shrink-0">{formatCurrency(r.price)}</p>
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
+  }
+
+  // Modal / overlay mode
   return (
     <AnimatePresence>
       <motion.div
@@ -92,7 +167,6 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
           onClick={(e) => e.stopPropagation()}
         >
           <div className="rounded-2xl border border-white/10 bg-[#1a0b2e]/95 backdrop-blur overflow-hidden shadow-2xl">
-            {/* Search input */}
             <div className="flex items-center gap-3 px-4 py-3 border-b border-white/10">
               <Search className="w-5 h-5 text-lilac flex-shrink-0" />
               <input
@@ -111,7 +185,6 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
             </div>
 
             <div className="max-h-[400px] overflow-y-auto">
-              {/* Browse categories (shown when no query) */}
               {!query && (
                 <div className="p-4">
                   <p className="text-muted-lavender text-xs font-medium mb-3 flex items-center gap-1.5">
@@ -130,22 +203,16 @@ export function SmartSearch({ isOpen, onClose }: SmartSearchProps) {
                   </div>
                 </div>
               )}
-
-              {/* Loading skeleton */}
               {loading && (
                 <div className="p-4 space-y-2">
                   {[1, 2, 3].map((i) => <div key={i} className="h-12 rounded-xl bg-white/5 animate-pulse" />)}
                 </div>
               )}
-
-              {/* No results */}
               {!loading && query && results.length === 0 && (
                 <div className="p-8 text-center">
                   <p className="text-muted-lavender text-sm">No results for &quot;{query}&quot;</p>
                 </div>
               )}
-
-              {/* Results */}
               {!loading && results.length > 0 && (
                 <div className="p-2">
                   {results.map((r) => (
