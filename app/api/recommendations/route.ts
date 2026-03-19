@@ -5,7 +5,6 @@ import { NextRequest } from "next/server";
 import { ok, serverError } from "@/lib/api-response";
 import { createServerSupabaseClient } from "@/supabase/server";
 
-// Map URL category param to actual Supabase table names
 const TABLE_MAP: Record<string, "gadgets" | "jerseys" | "cars" | "real_estates"> = {
   gadgets:    "gadgets",
   jerseys:    "jerseys",
@@ -15,7 +14,7 @@ const TABLE_MAP: Record<string, "gadgets" | "jerseys" | "cars" | "real_estates">
 
 export async function GET(req: NextRequest) {
   try {
-    const supabase = await createServerSupabaseClient();
+    const supabase  = await createServerSupabaseClient();
     const { searchParams } = new URL(req.url);
     const category  = searchParams.get("category") ?? "gadgets";
     const productId = searchParams.get("productId");
@@ -24,16 +23,26 @@ export async function GET(req: NextRequest) {
     const table = TABLE_MAP[category] ?? "gadgets";
 
     if (productId) {
-      const { data: ref } = await supabase.from(table).select("*").eq("id", productId).single();
+      const { data: ref } = await supabase
+        .from(table)
+        .select("*")
+        .eq("id", productId)
+        .single();
 
       if (ref) {
-        // ref is typed as the full row — .type and .brand exist on gadgets/jerseys/cars
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const r = ref as any;
-        let query = supabase.from(table).select("*").neq("id", productId).limit(limit);
+        // ref.type and ref.brand exist on gadgets/jerseys/cars rows — access
+        // through bracket notation with unknown cast to avoid any, then check
+        const refType  = (ref as Record<string, unknown>)["type"];
+        const refBrand = (ref as Record<string, unknown>)["brand"];
 
-        if (r.type)       query = query.eq("type" as never, r.type);
-        else if (r.brand) query = query.eq("brand" as never, r.brand);
+        let query = supabase
+          .from(table)
+          .select("*")
+          .neq("id", productId)
+          .limit(limit);
+
+        if (typeof refType  === "string") query = query.eq("type"  as never, refType);
+        else if (typeof refBrand === "string") query = query.eq("brand" as never, refBrand);
 
         const { data: similar } = await query;
         if (similar && similar.length >= 3) return ok(similar, "Similar products");
