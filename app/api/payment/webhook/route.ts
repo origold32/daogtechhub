@@ -92,14 +92,18 @@ export async function POST(req: NextRequest) {
     });
 
     // ── 6. Add success notification to user inbox ─────────────────────────────
-    await supabase.from("notifications").insert({
+    const { error: notifError } = await supabase.from("notifications").insert({
       user_id: order.user_id,
       type:    "order",
       title:   "Payment confirmed ✓",
       message: `Your payment of ₦${(tx.amount / 100).toLocaleString()} has been received. Receipt: ${receiptNum}`,
       read:    false,
       data:    { order_id: orderId, reference: ref, receipt_number: receiptNum },
-    }).catch(() => {});
+    });
+
+    if (notifError) {
+      console.warn("[webhook] notification insert failed", notifError);
+    }
   }
 
   return NextResponse.json({ received: true });
