@@ -14,7 +14,19 @@ import {
 import { cn } from "@/lib/utils";
 import { X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useMediaQuery } from "@mantine/hooks";
+// Native media query hook - replaces @mantine/hooks dependency
+function useMediaQuery(query: string): boolean {
+  const [matches, setMatches] = React.useState(false);
+  React.useEffect(() => {
+    if (typeof window === "undefined") return;
+    const mq = window.matchMedia(query);
+    setMatches(mq.matches);
+    const handler = (e: MediaQueryListEvent) => setMatches(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, [query]);
+  return matches;
+}
 import TitleCatption, { TitleCaptionProps } from "./title-caption";
 
 type DrawerData = {

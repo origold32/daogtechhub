@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, CloudUpload, X, Check } from "lucide-react";
+import { Camera, CloudUpload, X, Check, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import OverlayManager from "@/components/reusables/overlay-manager";
-import CircularUploadProgress from "@/components/loaders/circular-upload-progress";
 import useSWRMutation from "swr/mutation";
 import { createRemoteMutationFetcher } from "@/swr";
 import Image from "next/image";
@@ -291,9 +290,14 @@ export default function ProfileImageHelper({
 
             {/* Upload Progress */}
             {isUploading && (
-              <div className="flex flex-col items-center space-y-2">
-                <CircularUploadProgress progress={progress} />
-                <p className="text-sm text-gray-600">
+              <div className="flex flex-col items-center space-y-2 w-full">
+                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
+                  <div
+                    className="h-full bg-lilac transition-all"
+                    style={{ width: `${Math.min(progress, 100)}%` }}
+                  />
+                </div>
+                <p className="text-sm text-gray-200">
                   Uploading image... {progress}%
                 </p>
               </div>
@@ -302,8 +306,8 @@ export default function ProfileImageHelper({
             {/* Profile Update Progress */}
             {isUpdatingProfile && (
               <div className="flex flex-col items-center space-y-2">
-                <CircularUploadProgress progress={100} />
-                <p className="text-sm text-gray-600">Updating profile...</p>
+                <Loader2 className="h-5 w-5 animate-spin text-lilac" />
+                <p className="text-sm text-gray-200">Updating profile...</p>
               </div>
             )}
 

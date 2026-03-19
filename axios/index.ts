@@ -1,51 +1,87 @@
 // axios/index.ts
-import { AxiosRequestConfig, AxiosError } from "axios";
-import { CONST_Jwt_Storage_KeyName } from "@/const";
+// Axios instance wired to Next.js API routes.
+// Supabase JWT is attached per-request via an interceptor.
 
-const Axios = require("axios").default;
+import axios, { AxiosRequestConfig, AxiosError, AxiosResponse } from "axios";
 
-export const axiosBaseInstance = Axios.create({
-  baseURL: process.env.NEXT_PUBLIC_SWAGGER_API_BASE_URL,
+export const axiosBaseInstance = axios.create({
+  baseURL: "/api",
+  headers: { "Content-Type": "application/json" },
 });
 
-// Add a request interceptor
+// ── Lazy Supabase client ──────────────────────────────────────────────────────
+// BUG FIX #8: old code called createClient() at module level. Since
+// createBrowserClient is browser-only, importing this module during SSR
+// (e.g. in a Server Component tree or during next build) would throw.
+// Fix: lazily initialise the client inside the interceptor, which only
+// ever runs in the browser at request time.
+let _supabase: Awaited<ReturnType<typeof import("@/supabase/client").createClient>> | null = null;
+function getSupabaseClient() {
+  if (_supabase) return _supabase;
+  try {
+    // Dynamic require is fine here — this only runs client-side
+    const { createClient } = require("@/supabase/client");
+    _supabase = createClient();
+    return _supabase!;
+  } catch {
+    return null;
+  }
+}
+
+// ── Request: attach Supabase JWT ──────────────────────────────────────────────
 axiosBaseInstance.interceptors.request.use(
-  function (config: AxiosRequestConfig) {
-    const token = localStorage?.getItem(CONST_Jwt_Storage_KeyName);
-
-    if (token) {
+  async (config: AxiosRequestConfig) => {
+    const supabase = getSupabaseClient();
+    if (supabase) {
       try {
-        const payload = JSON.parse(atob(token.split(".")[1]));
-        const exp = payload.exp;
-        const now = Math.floor(Date.now() / 1000);
-
-        console.log("JWT Expiry:", new Date(exp * 1000).toLocaleString());
-        console.log("Current Time:", new Date(now * 1000).toLocaleString());
-        console.log("Token is expired?", now > exp);
-        console.log("JWT Payload:", payload);
-        console.log("JWT Token:", token);
-      } catch (e) {
-        console.warn("Invalid JWT format", e);
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${session.access_token}`,
+          };
+        }
+      } catch {
+        // Session unavailable — proceed without auth header
       }
-
-      config.headers = {
-        ...config.headers,
-        Authorization: `Bearer ${token}`,
-      };
     }
 
-    // ✅ Only set Content-Type to JSON if not FormData
-    const isFormData = config.data instanceof FormData;
-    if (!isFormData && !config.headers?.["Content-Type"]) {
-      config.headers = {
-        ...config.headers,
-        "Content-Type": "application/json",
-      };
+    // Don't override Content-Type for FormData uploads
+    if (config.data instanceof FormData) {
+      delete config.headers?.["Content-Type"];
     }
 
     return config;
   },
-  function (error: AxiosError) {
+  (error: AxiosError) => Promise.reject(error)
+);
+
+// ── Response: auto-retry on 401 after refreshing session ─────────────────────
+axiosBaseInstance.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError) {
+          return axiosBaseInstance(originalRequest);
+        }
+      }
+
+      // Refresh failed — redirect to sign-in
+      if (typeof window !== "undefined") {
+        const redirectTo = encodeURIComponent(window.location.pathname);
+        window.location.href = `/auth?redirectTo=${redirectTo}`;
+      }
+    }
+
     return Promise.reject(error);
   }
 );
+
+export default axiosBaseInstance;

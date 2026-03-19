@@ -17,7 +17,6 @@ export function useTableRouteApiSearchPagination(baseUrl: string, apiListKeyPath
 
   // split and seprate any query if any on the base url provided
   const baseUrlQuery = new URLSearchParams(baseUrl.split("?")[1]).toString();
-  console.log("base URL query", baseUrlQuery, baseUrl.split("?"));
   const baseUrlPathname = baseUrl.split("?")[0];
 
   const apiQuery = `page=${page}&limit=10`;
@@ -25,12 +24,9 @@ export function useTableRouteApiSearchPagination(baseUrl: string, apiListKeyPath
   if (baseUrlQuery) {
     url += `&${baseUrlQuery}`;
   }
-  console.log("base url path name", url);
 
   const { data: apiData, isLoading } = useSWR(url, fetcher);
-  // console.log("query is", apiData, apiData?.data?.data);
-  console.log("query is", apiData, getObjectKeyData(apiData, apiListKeyPath));
-
+  //
   const data = getObjectKeyData(apiData, apiListKeyPath) ?? [];
 
   const onSearchInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {

@@ -3,6 +3,7 @@
 "use client";
 
 import { useState } from "react";
+import Image from "next/image";
 import {
   Dialog,
   DialogContent,
@@ -11,46 +12,29 @@ import {
   DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { useSwapStore } from "@/store/swapStore";
 import { toast } from "sonner";
 import { Upload, X } from "lucide-react";
-import { FilterSelect } from "./FilterSelect";
-import TextAreaV1 from "./text-area-v1";
-import InputV1 from "./input-v1";
 
 export function SwapModal() {
-  const {
-    isSwapModalOpen,
-    currentGadget,
-    customerPhoneName,
-    setCustomerPhoneName,
-    closeSwapModal,
-    submitSwapRequest,
-  } = useSwapStore();
+  const { isSwapModalOpen, currentGadget, closeSwapModal, submitSwapRequest } =
+    useSwapStore();
   const [memory, setMemory] = useState("");
   const [batteryHealth, setBatteryHealth] = useState("");
   const [faceId, setFaceId] = useState(false);
   const [repairHistory, setRepairHistory] = useState("");
   const [images, setImages] = useState<string[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const memoryOptions = [
-    { value: "64", label: "64 GB" },
-    { value: "128", label: "128 GB" },
-    { value: "256", label: "256 GB" },
-    { value: "512", label: "512 GB" },
-    { value: "1024", label: "1 TB" },
-    { value: "2048", label: "2 TB" },
-  ];
-
-  const batteryOptions = [
-    { value: "90-100", label: "90-100% (Excellent)" },
-    { value: "80-89", label: "80-89% (Good)" },
-    { value: "75-79", label: "75-79% (Service)" },
-    { value: "below-75", label: "Below 75% (Damaged)" },
-  ];
 
   const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
@@ -78,7 +62,6 @@ export function SwapModal() {
     await new Promise((resolve) => setTimeout(resolve, 1500));
 
     submitSwapRequest({
-      customerPhoneName,
       memory,
       batteryHealth,
       faceId,
@@ -110,30 +93,41 @@ export function SwapModal() {
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          <InputV1
-            label="Your Phone Model"
-            value={customerPhoneName}
-            onChange={(e) => setCustomerPhoneName(e.target.value)}
-            placeholder="e.g. iPhone 13, Samsung S22..."
-          />
-          <div className="grid grid-cols-2 gap-4 items-center">
-            {/* Memory */}
-            <FilterSelect
-              value={memory}
-              onValueChange={setMemory}
-              placeholder="Select storage"
-              fullWidth
-              options={memoryOptions}
-            />
+          {/* Memory */}
+          <div className="space-y-2">
+            <Label htmlFor="memory" className="text-soft-white">
+              Storage Capacity (GB) <span className="text-red-400">*</span>
+            </Label>
+            <Select value={memory} onValueChange={setMemory}>
+              <SelectTrigger className="bg-[#1a0b2e] border-lilac-light text-soft-white">
+                <SelectValue placeholder="Select storage" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#2e1a47] border-lilac-light">
+                <SelectItem value="64">64 GB</SelectItem>
+                <SelectItem value="128">128 GB</SelectItem>
+                <SelectItem value="256">256 GB</SelectItem>
+                <SelectItem value="512">512 GB</SelectItem>
+                <SelectItem value="1024">1 TB</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
 
-            {/* Battery Health */}
-            <FilterSelect
-              value={batteryHealth}
-              onValueChange={setBatteryHealth}
-              placeholder="Select battery health"
-              fullWidth
-              options={batteryOptions}
-            />
+          {/* Battery Health */}
+          <div className="space-y-2">
+            <Label htmlFor="battery" className="text-soft-white">
+              Battery Health (%) <span className="text-red-400">*</span>
+            </Label>
+            <Select value={batteryHealth} onValueChange={setBatteryHealth}>
+              <SelectTrigger className="bg-[#1a0b2e] border-lilac-light text-soft-white">
+                <SelectValue placeholder="Select battery health" />
+              </SelectTrigger>
+              <SelectContent className="bg-[#2e1a47] border-lilac-light">
+                <SelectItem value="95-100">95-100% (Excellent)</SelectItem>
+                <SelectItem value="85-94">85-94% (Good)</SelectItem>
+                <SelectItem value="75-84">75-84% (Fair)</SelectItem>
+                <SelectItem value="below-75">Below 75% (Poor)</SelectItem>
+              </SelectContent>
+            </Select>
           </div>
 
           {/* Face ID */}
@@ -150,15 +144,18 @@ export function SwapModal() {
           </div>
 
           {/* Repair History */}
-
-          <TextAreaV1
-            label="Repair History"
-            id="repair"
-            placeholder="Any previous repairs? Screen replacement, battery change, etc."
-            value={repairHistory}
-            onChange={(e) => setRepairHistory(e.target.value)}
-            className="bg-[#1a0b2e] border-lilac-light text-soft-white placeholder:text-muted-lavender min-h-[100px]"
-          />
+          <div className="space-y-2">
+            <Label htmlFor="repair" className="text-soft-white">
+              Repair History
+            </Label>
+            <Textarea
+              id="repair"
+              placeholder="Any previous repairs? Screen replacement, battery change, etc."
+              value={repairHistory}
+              onChange={(e) => setRepairHistory(e.target.value)}
+              className="bg-[#1a0b2e] border-lilac-light text-soft-white placeholder:text-muted-lavender min-h-[100px]"
+            />
+          </div>
 
           {/* Image Upload */}
           <div className="space-y-2">
@@ -166,11 +163,7 @@ export function SwapModal() {
             <div className="grid grid-cols-3 gap-2">
               {images.map((img, index) => (
                 <div key={index} className="relative aspect-square">
-                  <img
-                    src={img}
-                    alt={`Upload ${index + 1}`}
-                    className="w-full h-full object-cover rounded-lg"
-                  />
+                  <Image src={img} alt={`Upload ${index + 1}`} fill className="object-cover rounded-lg" sizes="200px" unoptimized />
                   <button
                     onClick={() => removeImage(index)}
                     className="absolute -top-2 -right-2 w-6 h-6 bg-red-500 rounded-full flex items-center justify-center text-white"

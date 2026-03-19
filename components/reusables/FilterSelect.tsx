@@ -37,16 +37,9 @@ export function FilterSelect({
       >
         <SelectValue placeholder={placeholder} />
       </SelectTrigger>
-      <SelectContent
-        className="bg-[#2e1a47] border-lilac-light text-soft-white z-[200]"
-        position="popper"
-      >
+      <SelectContent className="bg-[#2e1a47] border-lilac-light">
         {options.map((option) => (
-          <SelectItem
-            key={option.value}
-            value={option.value}
-            className="focus:bg-lilac/20 focus:text-soft-white"
-          >
+          <SelectItem key={option.value} value={option.value}>
             {option.label}
           </SelectItem>
         ))}

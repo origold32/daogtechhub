@@ -72,12 +72,6 @@ export function sentenceCase(
     .join(" ");
 }
 
-// Example usage:
-const inputText: string = "love smith IS aN exAMPle OF SenTENCE";
-console.log(sentenceCase(inputText)); // Output: Love Smith is an Example of Sentence
-console.log(sentenceCase(inputText, false)); // Output: Love Smith Is An Example Of Sentence
-console.log(sentenceCase(inputText, true, 3)); // Output: Love Smith Is An
-console.log(sentenceCase(inputText, true, -1, ["is"])); // Output: Love Smith is an Example of Sentence
 
 export function pascalToSentence(pascalStr: string): string {
   // Add space before each capital letter, but avoid adding space at the start
@@ -85,6 +79,3 @@ export function pascalToSentence(pascalStr: string): string {
   // Capitalize the first letter and convert the rest to lower case
   return sentence.charAt(0).toUpperCase() + sentence.slice(1).toLowerCase();
 }
-
-// Example usage
-const examples = ["fullName", "dateOfBirth", "businessAddress"];

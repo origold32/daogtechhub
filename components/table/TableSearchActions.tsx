@@ -34,7 +34,6 @@ const TableSearchActions = ({
   const [isOpen, setIsOpen] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  console.log("is sort active", isSortActive);
 
   const getCSVData = async (range: number[] = [1, 2]) => {
     setIsOpen(false);
@@ -44,7 +43,6 @@ const TableSearchActions = ({
       : `?tab=${tabData}`;
     try {
       const resp = await axiosBaseInstance.get(`${exportUrl}${query}`);
-      console.log("resp is", resp, resp?.data);
       toast.success(resp.message);
       downloadCSV(`${resp?.data}`, type);
       setLoading(false);

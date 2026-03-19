@@ -61,13 +61,6 @@ export default function useOverflowCheck(
   function isAtEndingX(ref: any, offsetX = 50) {
     if (ref?.current) {
       const element = ref.current;
-      console.log(
-        "element scroll left",
-        element?.scrollLeft,
-        element?.clientWidth,
-        element.scrollWidth,
-        offsetX
-      );
       return (
         element.scrollLeft + element.clientWidth >=
         element.scrollWidth - offsetX
@@ -88,12 +81,10 @@ export default function useOverflowCheck(
   }
 
   function recalculate() {
-    console.log("recalculating");
     setToggleRecalc((val) => !val);
   }
 
   useEffect(() => {
-    console.log("ref is", ref);
     const element = ref?.current;
     function checkOverflow() {
       if (ref?.current) {
@@ -106,15 +97,6 @@ export default function useOverflowCheck(
           horizontal: isOverflowingHorizontally,
           vertical: isOverflowingVertically,
         });
-        console.log(
-          "is overflowoing...",
-          isOverflowingHorizontally,
-          isOverflowingVertically,
-          element.scrollWidth,
-          element.clientWidth,
-          element.scrollHeight,
-          element.clientHeight
-        );
       }
     }
 
@@ -124,7 +106,6 @@ export default function useOverflowCheck(
       const isAtEndX = isAtEndingX(ref);
       const isAtEndY = isAtEndingY(ref);
 
-      console.log("checking edges... is at beginning", isAtStartX);
       setIsAtEdge({ isAtStartX, isAtEndX: isAtEndX, isAtEndY, isAtStartY });
     }
 

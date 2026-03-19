@@ -39,25 +39,24 @@ export default async function makeApiRequest({
       ...config,
     });
 
-    // console.log("response is", resp);
+    //
     return {
       ...resp.data,
       message: resp.data?.message || "Success!",
       status: true,
     };
   } catch (error: any) {
-    console.log("there was an error", error);
     if (error.response) {
       // The request was made and the server responded with a status code
       // that falls out of the range of 2xx
-      //   console.log(error.response.data);
-      //   console.log(error.response.status);
-      //   console.log(error.response.headers);
-      // console.log("in post datta util", error.response);
+      //
+      //
+      //
+      //
       // const nonRedirectPaths = ["/login", "/", "/about"];
       // if (error.response.status == 401 && !nonRedirectPaths.includes(window.location.pathname)) {
       //   window.location.assign(new URL("/login", window.origin));
-      //   console.log("a 401 error occured");
+      //
       //   return;
       // }
       throw {
@@ -72,11 +71,6 @@ export default async function makeApiRequest({
       // The request was made but no response was received
       // `error.request` is an instance of XMLHttpRequest in the browser and an instance of
       // http.ClientRequest in node.js
-      console.log(
-        "The request was made but no response was received and error code",
-        error.request,
-        error.code
-      );
 
       throw {
         ...error,
@@ -87,10 +81,6 @@ export default async function makeApiRequest({
       };
     } else {
       // Something happened in setting up the request that triggered an Error
-      console.log(
-        "Something happened in setting up the request that triggered an Error",
-        error.message
-      );
       throw { ...error, message: error.message, status: false };
     }
   }

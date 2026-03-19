@@ -1,0 +1,25 @@
+# DAOG Tech Hub — robots.txt
+# https://daogtechhub.com
+
+User-agent: *
+Allow: /
+
+# Disallow admin and API routes
+Disallow: /admin/
+Disallow: /api/
+Disallow: /auth/
+Disallow: /checkout/
+Disallow: /profile/
+Disallow: /orders/
+
+# Allow specific API paths that have public product data
+Allow: /api/gadgets
+Allow: /api/jerseys
+Allow: /api/cars
+Allow: /api/realestate
+
+# Sitemaps
+Sitemap: https://daogtechhub.com/sitemap.xml
+
+# Crawl-delay
+Crawl-delay: 1

@@ -2,178 +2,220 @@
 
 import { useRouter } from "next/navigation";
 import {
-  ShoppingCart,
-  Plus,
-  User,
-  ChevronDown,
-  Package2,
-  Mail,
-  Heart,
-  Ticket,
+  ShoppingCart, User, ChevronDown, Package2,
+  Heart, Mail, Ticket, Sun, Moon, Search, Bell, LogOut, Loader2,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartAvatar } from "@/components/reusables/smart-avatar";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
+import { useThemeStore } from "@/store/themeStore";
+import { useSignOut } from "@/hooks/useSignOut";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+  DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import GoBack from "../reusables/go-back";
 import AppLogo from "../reusables/app-logo";
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import dynamic from "next/dynamic";
+import { useNotificationStore } from "@/store/notificationStore";
+
+const SmartSearch = dynamic(
+  () => import("@/components/product/SmartSearch").then((m) => ({ default: m.SmartSearch })),
+  { ssr: false, loading: () => <div className="h-9 flex-1 rounded-xl bg-white/5 animate-pulse" /> }
+);
+const NotificationPanel = dynamic(
+  () => import("@/components/notifications/NotificationPanel").then((m) => ({ default: m.NotificationPanel })),
+  { ssr: false }
+);
 
 interface CategoryNavigationProps {
   category: "gadgets" | "jerseys" | "cars" | "realestate";
-  showSellButton?: boolean;
 }
 
-export function CategoryNavigation({
-  category,
-  showSellButton = true,
-}: CategoryNavigationProps) {
+export function CategoryNavigation({ category }: CategoryNavigationProps) {
   const router = useRouter();
-  const { user, isAuthenticated, logout } = useAuthStore();
-  const { getTotalItems } = useCartStore();
+  const { user, isAuthenticated } = useAuthStore();
+  const { getTotalItems, setCartOpen, lastAddedId } = useCartStore();
+  const { theme, toggleTheme } = useThemeStore();
+  const { unreadCount, setPanelOpen } = useNotificationStore();
+  const { handleSignOut, loading: signingOut } = useSignOut();
+  const [showSearch, setShowSearch] = useState(false);
 
-  const categoryTitles = {
-    gadgets: "Gadgets",
-    jerseys: "Jerseys",
-    cars: "Cars",
+  // Only link to pages that actually exist
+  const dropdownItems = [
+    { label: "My Profile", icon: User,     href: "/profile" },
+    { label: "Orders",     icon: Package2, href: "/orders" },
+    { label: "Wishlist",   icon: Heart,    href: "/wishlist" },
+    { label: "Inbox",      icon: Mail,     href: "/inbox" },
+    { label: "Vouchers",   icon: Ticket,   href: "/vouchers" },
+  ];
+
+  const cartCount = getTotalItems();
+
+  const CATEGORY_LABELS: Record<string, string> = {
+    gadgets:    "Gadgets",
+    jerseys:    "Jerseys",
+    cars:       "Cars",
     realestate: "Real Estate",
   };
 
-  const dropdownItems = [
-    {
-      label: "Profile",
-      icon: User,
-      action: () => router.push("/profile"),
-    },
-    {
-      label: "Orders",
-      icon: Package2,
-      action: () => router.push("/orders"),
-    },
-    {
-      label: "Inbox",
-      icon: Mail,
-      action: () => router.push("/inbox"),
-    },
-    {
-      label: "Wishlist",
-      icon: Heart,
-      action: () => router.push("/wishlist"),
-    },
-    {
-      label: "Vouchers",
-      icon: Ticket,
-      action: () => router.push("/vouchers"),
-    },
-  ];
   return (
-    <nav className="fixed top-0 left-0 right-0 z-[100] px-4 lg:px-8 py-4 flex items-center justify-between bg-[#1A0B2E]/90 backdrop-blur-md border-b border-lilac/20">
-      {/* Left Section: Logo and Go Back */}
-      <div className="flex items-center gap-4">
-        <GoBack variant="nav" link="/" />
-        <div className="h-6 w-px bg-lilac" />
-        <div className="flex items-center gap-2">
-          <AppLogo width={40} height={40} />
-          <span className="hidden sm:inline text-lg font-bold text-lilac">
-            {categoryTitles[category]}
-          </span>
-        </div>
-      </div>
-
-      {/* Right Section: Sell Button, Cart, Auth */}
-      <div className="flex items-center gap-3">
-        {/* Sell Button - Hidden for jerseys */}
-        {showSellButton && (
-          <Button
-            onClick={() => router.push(`/${category}/sell`)}
-            variant="outline"
-            size="sm"
-            className="hidden sm:flex items-center gap-2 border-lilac/50 text-lilac hover:bg-lilac hover:text-deep-purple"
-          >
-            <Plus className="w-4 h-4" />
-            Sell
-          </Button>
-        )}
-
-        {/* Cart Button */}
-        <button
-          onClick={() => router.push("/cart")}
-          className="relative p-2 text-lilac hover:text-muted-foreground transition-colors"
-        >
-          <ShoppingCart className="w-5 h-5" />
-          {getTotalItems() > 0 && (
-            <span className="absolute -top-1 -right-1 w-5 h-5 bg-lilac text-[#1A0B2E] text-xs font-bold rounded-full flex items-center justify-center">
-              {getTotalItems()}
+    <>
+      <nav
+        className="fixed top-9 left-0 right-0 z-[100] px-4 lg:px-8 py-3 flex items-center justify-between border-b border-lilac/15"
+        style={{ background: "rgba(26,11,46,0.95)", backdropFilter: "blur(20px)" }}
+      >
+        {/* Left */}
+        <div className="flex items-center gap-3">
+          <GoBack variant="nav" link="/" />
+          <div className="h-5 w-px bg-lilac/40" />
+          <div className="flex items-center gap-2 cursor-pointer" onClick={() => router.push("/")}>
+            <AppLogo width={36} height={36} />
+            <span className="hidden sm:inline text-base font-bold text-lilac">
+              {CATEGORY_LABELS[category]}
             </span>
-          )}
-        </button>
+          </div>
+        </div>
 
-        {/* Auth Section */}
-        {isAuthenticated && user ? (
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <div className="flex items-center gap-2 p-1 rounded-full border transition-colors cursor-pointer">
-                <SmartAvatar
-                  data={user}
-                  getKey={(u) => u.id}
-                  getName={(u) => `${u.firstName} ${u.lastName}`}
-                  getInitialsName={(u) => `${u.firstName} ${u.lastName}`}
-                  responsiveName
-                  avatarSizeClassName="w-6 h-6"
-                  fallbackTextClassName="text-xs"
-                />
-                <ChevronDown className="shrink-0 mx-2" size={14} />
-              </div>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent
-              align="end"
-              className="glass-card-small z-[200]"
-            >
-              {dropdownItems.map((item, index) => {
-                const Icon = item.icon;
+        {/* Center search (desktop) */}
+        <div className="hidden lg:block flex-1 max-w-md mx-6">
+          <SmartSearch />
+        </div>
 
-                return (
-                  <DropdownMenuItem
-                    key={index}
-                    onClick={item.action}
-                    className="text-lilac cursor-pointer flex items-center gap-3 data-[highlighted]:bg-lilac/20 data-[highlighted]:text-lilac"
-                  >
-                    <span className="w-4 flex justify-center">
-                      {Icon && <Icon size={16} />}
-                    </span>
-                    <p>{item.label}</p>
-                  </DropdownMenuItem>
-                );
-              })}
-
-              <div className="flex-1 h-px bg-muted-lavender opacity-50 my-1" />
-
-              <Button
-                onClick={logout}
-                variant="ghost"
-                className="text-center text-primary w-full hover:bg-transparent hover:text-muted-foreground "
-                rounded={"default"}
-              >
-                Logout
-              </Button>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        ) : (
-          <Button
-            onClick={() => router.push("/auth")}
-            variant="outline"
-            size="sm"
-            className="border-lilac/50 text-lilac hover:bg-lilac hover:text-deep-purple"
+        {/* Right */}
+        <div className="flex items-center gap-2">
+          {/* Mobile search */}
+          <button
+            onClick={() => setShowSearch((s) => !s)}
+            className="lg:hidden p-2 text-muted-lavender hover:text-lilac transition-colors rounded-xl hover:bg-white/5"
           >
-            Sign In
-          </Button>
+            <Search className="w-4 h-4" />
+          </button>
+
+
+
+          {/* Theme */}
+          <button
+            onClick={toggleTheme}
+            className="p-2 text-muted-lavender hover:text-lilac transition-colors rounded-xl hover:bg-white/5"
+          >
+            {theme === "dark" ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+          </button>
+
+          {/* Notifications */}
+          <button
+            onClick={() => setPanelOpen(true)}
+            className="relative p-2 text-muted-lavender hover:text-lilac transition-colors rounded-xl hover:bg-white/5"
+          >
+            <Bell className="w-4 h-4" />
+            {unreadCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 text-white text-xs font-black rounded-full flex items-center justify-center">
+                {unreadCount > 9 ? "9+" : unreadCount}
+              </span>
+            )}
+          </button>
+
+          {/* Cart */}
+          <button
+            onClick={() => setCartOpen(true)}
+            className="relative p-2 text-lilac hover:text-soft-white transition-colors rounded-xl hover:bg-lilac/10"
+          >
+            <motion.div
+              animate={lastAddedId ? { scale: [1, 1.4, 1] } : {}}
+              transition={{ duration: 0.4 }}
+            >
+              <ShoppingCart className="w-5 h-5" />
+            </motion.div>
+            <AnimatePresence>
+              {cartCount > 0 && (
+                <motion.span
+                  key={cartCount}
+                  initial={{ scale: 0 }} animate={{ scale: 1 }} exit={{ scale: 0 }}
+                  className="absolute -top-1 -right-1 w-5 h-5 bg-lilac text-deep-purple text-xs font-black rounded-full flex items-center justify-center"
+                >
+                  {cartCount > 9 ? "9+" : cartCount}
+                </motion.span>
+              )}
+            </AnimatePresence>
+          </button>
+
+          {/* Auth */}
+          {isAuthenticated && user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-2 px-2 py-1 rounded-2xl border border-white/10 cursor-pointer hover:border-lilac/30 transition-colors">
+                  <SmartAvatar
+                    data={user}
+                    getKey={(u) => u.id}
+                    getName={(u) => `${u.firstName} ${u.lastName}`}
+                    getInitialsName={(u) => `${u.firstName} ${u.lastName}`}
+                    responsiveName
+                    avatarSizeClassName="w-6 h-6"
+                    fallbackTextClassName="text-xs"
+                  />
+                  <ChevronDown className="shrink-0" size={12} />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="glass-card-small z-[200] min-w-[180px]">
+                {dropdownItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.label}
+                    onClick={() => router.push(item.href)}
+                    className="text-lilac cursor-pointer flex items-center gap-3 data-[highlighted]:bg-lilac/20"
+                  >
+                    <item.icon size={14} />
+                    <p className="text-sm">{item.label}</p>
+                  </DropdownMenuItem>
+                ))}
+                <div className="h-px bg-white/10 my-1" />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="text-red-400 cursor-pointer flex items-center gap-3 data-[highlighted]:bg-red-400/10"
+                >
+                  {signingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                  <p className="text-sm">Sign out</p>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <div className="flex items-center gap-2">
+              <Button
+                onClick={() => router.push("/auth?mode=signin&redirectTo=/profile")}
+                variant="outline" size="sm"
+                className="border-lilac/40 text-lilac hover:bg-lilac hover:text-deep-purple rounded-xl text-xs"
+              >
+                Sign In
+              </Button>
+              <Button
+                onClick={() => router.push("/auth?mode=signup&redirectTo=/profile")}
+                size="sm"
+                className="bg-lilac text-deep-purple hover:bg-lilac/90 rounded-xl text-xs px-3"
+              >
+                Sign Up
+              </Button>
+            </div>
+          )}
+        </div>
+      </nav>
+
+      {/* Panels */}
+      <NotificationPanel />
+
+      {/* Mobile search dropdown */}
+      <AnimatePresence>
+        {showSearch && (
+          <motion.div
+            initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
+            className="fixed top-[92px] left-0 right-0 z-[99] px-4 py-3 border-b border-lilac/10"
+            style={{ background: "rgba(26,11,46,0.98)" }}
+          >
+            <SmartSearch />
+          </motion.div>
         )}
-      </div>
-    </nav>
+      </AnimatePresence>
+    </>
   );
 }

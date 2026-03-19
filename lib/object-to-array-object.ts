@@ -41,4 +41,3 @@ const data = {
   },
 };
 
-console.log(objectToArrayOfObject(data));

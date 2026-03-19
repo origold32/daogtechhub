@@ -111,20 +111,48 @@ const config = {
           },
         },
         "caret-blink": {
-          "0%,70%,100%": {
-            opacity: "1",
-          },
-          "20%,50%": {
-            opacity: "0",
-          },
+          "0%,70%,100%": { opacity: "1" },
+          "20%,50%":      { opacity: "0" },
+        },
+        "shimmer-move": {
+          "0%":   { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        "spin-around": {
+          "0%":      { transform: "translateZ(0) rotate(0)" },
+          "15%,35%": { transform: "translateZ(0) rotate(90deg)" },
+          "65%,85%": { transform: "translateZ(0) rotate(270deg)" },
+          "100%":    { transform: "translateZ(0) rotate(360deg)" },
+        },
+        "fade-in-up": {
+          "0%":   { opacity: "0", transform: "translateY(12px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "scale-in": {
+          "0%":   { opacity: "0", transform: "scale(0.95)" },
+          "100%": { opacity: "1", transform: "scale(1)" },
+        },
+        "slide-down": {
+          "0%":   { opacity: "0", transform: "translateY(-8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
+        },
+        "count-up": {
+          "0%":   { opacity: "0", transform: "translateY(8px)" },
+          "100%": { opacity: "1", transform: "translateY(0)" },
         },
       },
       animation: {
-        "accordion-down": "accordion-down 0.2s ease-out",
-        "accordion-up": "accordion-up 0.2s ease-out",
-        marquee: "marquee var(--duration) linear infinite",
+        "accordion-down":   "accordion-down 0.2s ease-out",
+        "accordion-up":     "accordion-up 0.2s ease-out",
+        marquee:            "marquee var(--duration) linear infinite",
         "marquee-vertical": "marquee-vertical var(--duration) linear infinite",
-        "caret-blink": "caret-blink 1.25s ease-out infinite",
+        "caret-blink":      "caret-blink 1.25s ease-out infinite",
+        "shimmer-move":     "shimmer-move 1.5s linear infinite",
+        "spin-around":      "spin-around calc(var(--speed)*2) infinite linear",
+        "fade-in-up":       "fade-in-up 0.35s ease-out both",
+        "scale-in":         "scale-in 0.2s ease-out both",
+        "slide-down":       "slide-down 0.2s ease-out both",
+        "count-up":         "count-up 0.4s ease-out both",
       },
     },
   },

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { act, ReactNode, useEffect, useId, useState } from "react";
+import React, { ReactNode, useEffect, useId, useState } from "react";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { motion as m } from "framer-motion";
 import { cn } from "@/lib/utils";

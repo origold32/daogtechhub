@@ -1,5 +1,7 @@
 import { NextResponse } from "next/server";
-import nodemailer from "nodemailer";
+import { Resend } from "resend";
+
+const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST(req: Request) {
   try {
@@ -12,36 +14,35 @@ export async function POST(req: Request) {
       );
     }
 
-    // Create transporter using Gmail SMTP
-    const transporter = nodemailer.createTransport({
-      service: "gmail",
-      auth: {
-        user: process.env.GMAIL_USER,
-        pass: process.env.GMAIL_PASS,
-      },
-    });
-
-    await transporter.sendMail({
-      from: `"Oriola (daog tech hub)" <${process.env.GMAIL_USER}>`,
-      to: process.env.TO_EMAIL,
+    await resend.emails.send({
+      from: "DAOG Store <no-reply@yourdomain.com>", // 👈 replace with your verified domain
+      to: "daogstore@gmail.com",
       replyTo: email,
-      subject: `${product}`,
+      subject: `New enquiry from ${name}: ${product}`,
       html: `
-            <div style="font-family: sans-serif; color: #1a1a2e;">
-              <p style="white-space: pre-wrap;">${message}</p>
+        <div style="font-family: sans-serif; max-width: 560px; margin: 0 auto; color: #1a1a2e;">
+          <h2 style="color: #a855f7; margin-bottom: 4px;">New Contact Form Submission</h2>
+          <hr style="border: none; border-top: 1px solid #e5e7eb; margin-bottom: 20px;" />
 
-              <hr style="margin: 20px 0;" />
+          <p><strong>Name:</strong> ${name}</p>
+          <p><strong>Email:</strong> <a href="mailto:${email}" style="color: #a855f7;">${email}</a></p>
+          <p><strong>Looking for:</strong> ${product}</p>
 
-              <p style="font-size: 12px; color: #6b7280;">
-                This email was sent from the contact form on DAOG TECH HUB website. Hit reply to respond directly to ${name}.
-              </p>
-            </div>
-            `,
+          <div style="background:#f9f5ff; border-left: 4px solid #a855f7; padding: 12px 16px; border-radius: 4px; margin-top: 16px;">
+            <p style="margin: 0; white-space: pre-wrap;">${message}</p>
+          </div>
+
+          <p style="margin-top: 24px; font-size: 12px; color: #9ca3af;">
+            This email was sent from the contact form on your DAOG website.
+            Hit reply to respond directly to ${name}.
+          </p>
+        </div>
+      `,
     });
 
     return NextResponse.json({ success: true });
   } catch (err) {
-    console.error("Email error:", err);
+    console.error("[contact] Resend error:", err);
     return NextResponse.json(
       { error: "Failed to send message. Please try again later." },
       { status: 500 },

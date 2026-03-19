@@ -14,7 +14,6 @@ export default function useUrlQueryState<T extends string | number>(
 
   const setQueryParamState = useCallback(
     (value: string | number) => {
-      console.log("setting active tab...", value, paraName);
       // Pass the push parameter here too
       setQueryParam(paraName, value, push);
     },

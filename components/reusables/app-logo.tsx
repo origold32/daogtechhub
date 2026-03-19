@@ -1,6 +1,5 @@
 "use client";
 
-import useUser from "@/hooks/useUser";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 import Link from "next/link";
@@ -19,43 +18,35 @@ type Props = {
 
 const AppLogo = ({
   children,
-  link,
+  link = "/",
   className,
   text,
   width = 90,
   height = 90,
   logoSrc,
-  logoAlt = "App Logo",
+  logoAlt = "DAOG Tech Hub",
 }: Props) => {
-  const { user } = useUser();
-
-  const fallbackLogo = "/images/logo.png"; // Local fallback
-  const resolvedLogo =
-    logoSrc && logoSrc.trim() !== "" ? logoSrc : fallbackLogo;
+  const fallbackLogo = "/images/logo.png";
+  const resolvedLogo = logoSrc && logoSrc.trim() !== "" ? logoSrc : fallbackLogo;
 
   return (
     <Link
-      className={cn(
-        "relative flex items-center gap-1 focus:outline-none",
-        className,
-      )}
-      href={user ? "/" : "/"}
+      className={cn("relative flex items-center gap-1 focus:outline-none", className)}
+      href={link}
     >
       <Image
         src={resolvedLogo}
         alt={logoAlt}
         width={width}
         height={height}
+        priority
         onError={(e) => {
-          const target = e.target as HTMLImageElement;
-          target.src = fallbackLogo; // fallback if remote fails
+          (e.target as HTMLImageElement).src = fallbackLogo;
         }}
       />
-      {text ? (
-        <span className="font-bold whitespace-nowrap dark:text-white">
-          {text}
-        </span>
-      ) : null}
+      {text && (
+        <span className="font-bold whitespace-nowrap dark:text-white">{text}</span>
+      )}
       {children}
       <span className="sr-only">App logo</span>
     </Link>

@@ -1,211 +1,152 @@
+// components/layouts/auth/verify-account.tsx
+// OTP entry component — used for both email 6-digit codes and SMS codes.
 "use client";
 
-import { useState } from "react";
-import { Button } from "@/components/ui/button";
-import useSWRMutation from "swr/mutation";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import CustomCountDown from "@/components/reusables/countdown-custom";
-import { createRemoteMutationFetcher } from "@/swr";
 import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { cn } from "@/lib/utils";
 import { Value } from "react-phone-number-input";
-import type { User } from "@/store/authStore";
-
-// ---------------------------------------------------------------------------
-// 🧪 MOCK — remove this entire block when the API is ready
-// ---------------------------------------------------------------------------
-const MOCK_OTP = "123456";
-const MOCK_DELAY_MS = 900;
-
-function buildMockUser(
-  identifier: string | Value,
-  isExistingUser: boolean,
-): User {
-  if (isExistingUser) {
-    return {
-      id: "usr_001",
-      firstName: "John",
-      lastName: "Doe",
-      email: String(identifier),
-      role: "customer",
-    };
-  }
-  return {
-    id: `usr_${Date.now()}`,
-    firstName: "New",
-    lastName: "User",
-    email: String(identifier),
-    role: "customer",
-  };
-}
-// ---------------------------------------------------------------------------
+import { Loader2, RefreshCw, AlertCircle } from "lucide-react";
 
 type VerifyAccountProps = {
-  identifier: string | Value;
-  isExistingUser?: boolean; // 🧪 MOCK only — remove when API returns user data
-  onSuccess?: (data: any) => void;
+  identifier:  string | Value;
+  onSuccess?:  (data: any) => void;
+  onVerify:    (otp: string) => Promise<{ success: boolean; error?: string }>;
+  onResend:    ()            => Promise<{ success: boolean; error?: string }>;
 };
 
-const VerifyAccount = ({
-  identifier,
-  isExistingUser = false,
-  onSuccess,
-}: VerifyAccountProps) => {
-  const [otpValue, setOtpValue] = useState("");
-  const [countdown, setCountdown] = useState(Date.now() + 0.2 * 60 * 1000);
-  const [otpWrong, setOtpWrong] = useState(false);
+const VerifyAccount = ({ identifier, onSuccess, onVerify, onResend }: VerifyAccountProps) => {
+  const [otpValue,   setOtpValue]   = useState("");
+  const [countdown,  setCountdown]  = useState(Date.now() + 2 * 60 * 1000);
+  const [otpWrong,   setOtpWrong]   = useState(false);
+  const [verifying,  setVerifying]  = useState(false);
+  const [resending,  setResending]  = useState(false);
+  const [errorMsg,   setErrorMsg]   = useState<string | null>(null);
+  const [attempts,   setAttempts]   = useState(0);
+  const verifyingRef = useRef(false); // prevent double-fire on StrictMode
 
-  // ---------------------------------------------------------------------------
-  // 🧪 MOCK state — remove when using real SWR mutations below
-  // ---------------------------------------------------------------------------
-  const [verifying, setVerifying] = useState(false);
-  const [resending, setResending] = useState(false);
-  // ---------------------------------------------------------------------------
+  const canResend = countdown < Date.now();
 
-  // ---------------------------------------------------------------------------
-  // ✅ REAL — uncomment these and remove the mock handlers below when API is ready
-  //
-  // const { trigger: verifyOtpApi, isMutating: verifying } = useSWRMutation(
-  //   "/auth/otp-verify",
-  //   createRemoteMutationFetcher("post"),
-  //   {
-  //     onSuccess: (data) => {
-  //       toast.success(data.message);
-  //       onSuccess?.(data); // data should include the user object
-  //     },
-  //     onError: (err: any) => {
-  //       toast.error(err.message);
-  //       setOtpWrong(true);
-  //       setTimeout(() => setOtpWrong(false), 400);
-  //     },
-  //   },
-  // );
-  //
-  // const { trigger: resendOtpApi, isMutating: resending } = useSWRMutation(
-  //   "/auth/otp-generate",
-  //   createRemoteMutationFetcher("post"),
-  //   {
-  //     onSuccess: (data) => {
-  //       toast.success(data.message);
-  //       setCountdown(Date.now() + 0.2 * 60 * 1000);
-  //     },
-  //     onError: (err: any) => toast.error(err.message),
-  //   },
-  // );
-  // ---------------------------------------------------------------------------
-
-  // ---------------------------------------------------------------------------
-  // 🧪 MOCK handlers — replace with API calls above when backend is ready
-  // ---------------------------------------------------------------------------
-  const verifyOtpMock = async (otp: string) => {
-    setVerifying(true);
-    await new Promise((r) => setTimeout(r, MOCK_DELAY_MS));
-    if (otp === MOCK_OTP) {
-      toast.success("OTP verified!");
-      onSuccess?.(buildMockUser(identifier, isExistingUser));
-    } else {
-      toast.error("Incorrect OTP. Try again.");
-      setOtpWrong(true);
-      setTimeout(() => setOtpWrong(false), 400);
-      setOtpValue("");
-    }
-    setVerifying(false);
-  };
-
-  const resendOtpMock = async () => {
-    setResending(true);
-    await new Promise((r) => setTimeout(r, 600));
-    toast.success(`OTP resent to ${String(identifier)}`);
-    setCountdown(Date.now() + 0.2 * 60 * 1000);
-    setResending(false);
-  };
-  // ---------------------------------------------------------------------------
-
-  const canResendCode = countdown < Date.now();
-
-  const handleOtpChange = (val: string) => {
+  // Auto-submit when 6 digits entered
+  const handleOtpChange = async (val: string) => {
     setOtpValue(val);
-    if (val.length === 6 && !verifying) {
-      // 🧪 MOCK: verifyOtpMock(val)
-      // ✅ REAL: verifyOtpApi({ data: { otp: val, identifier } })
-      verifyOtpMock(val);
+    setErrorMsg(null);
+
+    if (val.length === 6 && !verifyingRef.current) {
+      verifyingRef.current = true;
+      setVerifying(true);
+
+      const result = await onVerify(val);
+
+      setVerifying(false);
+      verifyingRef.current = false;
+
+      if (!result.success) {
+        const msg = result.error ?? "Incorrect code — please try again.";
+        setErrorMsg(msg);
+        setOtpWrong(true);
+        setAttempts((n) => n + 1);
+        setTimeout(() => setOtpWrong(false), 500);
+        setOtpValue("");
+      } else {
+        toast.success("Verified! Welcome to DAOG Tech Hub.", { duration: 3000 });
+        onSuccess?.(result);
+      }
+    }
+  };
+
+  const handleResend = async () => {
+    setResending(true);
+    setErrorMsg(null);
+    const result = await onResend();
+    setResending(false);
+
+    if (result.success) {
+      toast.success(`New code sent to ${String(identifier)}`);
+      setCountdown(Date.now() + 2 * 60 * 1000);
+      setOtpValue("");
+      setAttempts(0);
+    } else {
+      setErrorMsg(result.error ?? "Failed to resend code. Please try again.");
     }
   };
 
   return (
     <div className="space-y-4 w-full">
-      {/* 🧪 MOCK hint — remove before production */}
-      <p className="text-center text-xs text-yellow-400/70 bg-yellow-400/10 rounded px-3 py-1">
-        🧪 Mock mode — use OTP <strong>{MOCK_OTP}</strong> to verify
+      <p className="text-center text-sm text-white/40">
+        Enter the 6-digit code sent to{" "}
+        <span className="font-semibold text-white/70 break-all">{String(identifier)}</span>
       </p>
 
-      <p className="text-center text-sm text-muted-lavender">
-        We sent a verification code to{" "}
-        <span className="font-semibold">{identifier}</span>. Kindly provide the
-        code to continue
-      </p>
+      {/* OTP input */}
+      <div className={cn("transition-all duration-200", otpWrong && "animate-shake")}>
+        <InputOtpV1
+          value={otpValue}
+          onChange={handleOtpChange}
+          maxLength={6}
+          disabled={verifying || resending}
+          className={cn(
+            "transition-all",
+            otpWrong ? "border-red-500/50" : ""
+          )}
+        />
+      </div>
 
-      <InputOtpV1
-        value={otpValue}
-        onChange={handleOtpChange}
-        maxLength={6}
-        disabled={verifying}
-        className={cn("transition-all", otpWrong && "shake border-destructive")}
-      />
-
+      {/* Loading indicator */}
       {verifying && (
-        <p className="text-center text-sm text-muted-lavender animate-pulse">
-          Verifying OTP…
+        <div className="flex items-center justify-center gap-2">
+          <Loader2 size={13} className="animate-spin text-lilac/60" />
+          <p className="text-center text-xs text-white/40">Verifying…</p>
+        </div>
+      )}
+
+      {/* Inline error */}
+      {errorMsg && (
+        <div className="flex items-start gap-2 px-3 py-2.5 rounded-xl bg-red-500/[0.08] border border-red-500/20">
+          <AlertCircle size={13} className="text-red-400 shrink-0 mt-0.5" />
+          <p className="text-red-300/90 text-xs leading-relaxed">{errorMsg}</p>
+        </div>
+      )}
+
+      {/* Too many attempts hint */}
+      {attempts >= 3 && (
+        <p className="text-center text-[11px] text-white/25 leading-relaxed">
+          Having trouble? Check your spam folder, or go back and try a different method.
         </p>
       )}
 
-      <Button
-        loading={resending}
-        loadingText="Resending OTP"
-        onClick={() => {
-          // 🧪 MOCK: resendOtpMock()
-          // ✅ REAL: resendOtpApi({ data: { verify: identifier } })
-          resendOtpMock();
-        }}
-        disabled={!canResendCode}
-        variant="ghost"
-        className="mt-2 text-center text-sm text-primary w-full hover:bg-transparent hover:text-muted-foreground disabled:cursor-not-allowed disabled:text-muted-lavender"
-        rounded={"default"}
+      {/* Resend button */}
+      <button
+        onClick={handleResend}
+        disabled={!canResend || resending || verifying}
+        className="w-full flex items-center justify-center gap-2 mt-1 text-sm text-white/35 hover:text-white/60 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
       >
-        {canResendCode ? (
-          <span>Resend code</span>
+        {resending ? (
+          <><Loader2 size={13} className="animate-spin" />Resending…</>
+        ) : canResend ? (
+          <><RefreshCw size={12} />Resend code</>
         ) : (
-          <div>
-            Resend code in:{" "}
+          <span className="text-xs">
+            Resend in{" "}
             <CustomCountDown
               date={countdown}
               variant="ms"
               onComplete={() => setCountdown(0)}
-              className="font-semibold"
+              className="font-semibold text-white/50"
             />
-          </div>
+          </span>
         )}
-      </Button>
+      </button>
 
-      {/* Shake animation CSS */}
       <style jsx>{`
         @keyframes shake {
-          0%,
-          100% {
-            transform: translateX(0);
-          }
-          20%,
-          60% {
-            transform: translateX(-8px);
-          }
-          40%,
-          80% {
-            transform: translateX(8px);
-          }
+          0%, 100% { transform: translateX(0); }
+          20%, 60% { transform: translateX(-8px); }
+          40%, 80% { transform: translateX(8px); }
         }
-        .shake {
-          animation: shake 0.4s ease-in-out;
-        }
+        .animate-shake { animation: shake 0.45s ease-in-out; }
       `}</style>
     </div>
   );

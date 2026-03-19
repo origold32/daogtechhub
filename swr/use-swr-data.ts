@@ -2,7 +2,7 @@
 
 import customResponseApiRequest, { apiMethod } from "@/axios/make-api-request";
 import { toast } from "sonner";
-import { useEffect, useRef, useState } from "react";
+import { useState } from "react";
 import type { SWRConfiguration } from "swr";
 import useSWR from "swr";
 import { fetcher, logger } from ".";
@@ -25,40 +25,17 @@ export default function useRemoteData<
     { use: [logger], ...config.options }
   );
   const [mutating, setMutating] = useState(false);
-  const originalDataRef = useRef<T>();
-  const currentDataRef = useRef<T>();
 
-  useEffect(() => {
-    console.log("first use effect");
-    if (!originalDataRef.current && data) {
-      originalDataRef.current = data;
-      console.log("setting original data", data);
-    }
-  }, [data, mutate]);
-
-  useEffect(() => {
-    console.log("second use effect");
-    return () => {
-      if (originalDataRef.current && currentDataRef.current) {
-        if (
-          JSON.stringify(originalDataRef.current) !==
-          JSON.stringify(currentDataRef.current)
-        ) {
-          mutate(originalDataRef.current, { revalidate: false });
-          console.log(
-            "resetting data to original... originalData, data",
-            originalDataRef.current,
-            currentDataRef.current,
-            data
-          );
-        }
-      }
-    };
-  }, [data, mutate]);
+  // ── BUG FIX: The old implementation had a cleanup effect that captured
+  // `originalDataRef` and `currentDataRef` in its deps array ([data, mutate]).
+  // Every time `data` changed, React ran the *previous* cleanup which called
+  // mutate(originalData) — silently reverting any update the user just made.
+  // The cleanup only makes sense on unmount (empty deps), and even then only
+  // if you want to restore stale data on navigation — which breaks pagination,
+  // filters, and real-time updates. Removed entirely. ──────────────────────
 
   function mutateLocalData(updatedData: T) {
     mutate(updatedData, { revalidate: false });
-    currentDataRef.current = updatedData;
   }
 
   async function mutateRemoteData(updatedData?: T) {
@@ -71,7 +48,8 @@ export default function useRemoteData<
       });
       setMutating(false);
       toast.success(resp?.message);
-      originalDataRef.current = data;
+      // Re-validate from server after successful mutation
+      mutate();
     } catch (error: any) {
       setMutating(false);
       toast.error(error?.message);

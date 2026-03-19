@@ -1,27 +1,22 @@
+// components/reusables/input-phone-5.tsx
+// Phone number input using react-phone-number-input with emoji flag country selector.
+// react-flag-kit removed — replaced with Unicode emoji flags (zero extra dependencies).
 "use client";
 
 import * as React from "react";
-import { Input, InputInfoProps } from "@/components/ui/input";
-import PhoneInput, { Country, Value } from "react-phone-number-input";
+import { InputInfoProps } from "@/components/ui/input";
+import PhoneInput, { Country, Value, getCountryCallingCode } from "react-phone-number-input";
 import "react-phone-number-input/style.css";
 import {
-  Select,
-  SelectContent,
-  SelectGroup,
-  SelectItem,
-  SelectLabel,
-  SelectValue,
+  Select, SelectContent, SelectGroup, SelectItem, SelectLabel, SelectValue,
 } from "@/components/ui/select";
-import { getCountryCallingCode } from "react-phone-number-input";
-import { FlagIcon, FlagIconCode } from "react-flag-kit";
-import { Trigger } from "@radix-ui/react-select";
+import * as SelectPrimitive from "@radix-ui/react-select";
 import { cn } from "@/lib/utils";
 import { Label } from "@/components/ui/label";
 import InputV1 from "./input-v1";
 
 export interface InputPhone5Props
-  extends
-    Omit<React.ComponentPropsWithoutRef<"input">, "onChange" | "value">,
+  extends Omit<React.ComponentPropsWithoutRef<"input">, "onChange" | "value">,
     InputInfoProps {
   label: string;
   labelClassName?: string;
@@ -32,54 +27,56 @@ export interface InputPhone5Props
   defaultValue?: string;
 }
 
+/** Convert ISO country code to emoji flag (e.g. "NG" → "🇳🇬") */
+function countryToEmoji(code: string): string {
+  if (!code || code.length !== 2) return "🌐";
+  return code
+    .toUpperCase()
+    .split("")
+    .map((c) => String.fromCodePoint(c.codePointAt(0)! - 65 + 0x1f1e6))
+    .join("");
+}
+
 const InputPhone5 = React.forwardRef<HTMLInputElement, InputPhone5Props>(
-  (
-    {
-      defaultValue,
-      className,
-      rootClassName,
-      onChange,
-      label,
-      labelClassName,
-      requiredStar,
-      warn,
-      error,
-      info,
-      ...props
-    },
-    ref,
-  ) => {
-    const [value, setValue] = React.useState<string>("");
-    const id = React.useId();
+  ({ defaultValue, className, rootClassName, onChange, label, labelClassName,
+     requiredStar, warn, error, info, ...props }, _ref) => {
+
+    const [value, setValue] = React.useState<string>(defaultValue ?? "");
 
     React.useEffect(() => {
       setValue(defaultValue ?? "");
     }, [defaultValue]);
 
     return (
-      <div>
+      <div className={rootClassName}>
+        {label && (
+          <Label className={cn("block text-[11px] text-white/40 font-medium tracking-widest uppercase mb-1", labelClassName)}>
+            {label}{requiredStar && <span className="text-red-400 ml-0.5">*</span>}
+          </Label>
+        )}
         <PhoneInput
-          className={cn("flex-1", rootClassName)}
-          defaultCountry={"NG"}
+          defaultCountry="NG"
           international={false}
           withCountryCallingCode
-          limitMaxLength={true}
+          limitMaxLength
           inputComponent={InputV1}
-          numberInputProps={{ className: " rounded-l-none focus:z-10" }}
-          placeholder="eg. 07092345678"
+          numberInputProps={{ className: "rounded-l-none focus:z-10" }}
+          placeholder="e.g. 07012345678"
           countrySelectComponent={CountrySelect}
-          label={label ?? "Enter phone number"}
+          label={label ?? "Phone number"}
           {...props}
-          // ref={ref} // Uncomment this if InputV1 supports forwarding the ref
           value={props.value ?? value}
           onChange={(val) => {
             onChange?.(val);
             setValue(val ?? "");
           }}
         />
+        {error && <p className="text-[11px] text-red-400 mt-1">{error}</p>}
+        {warn  && <p className="text-[11px] text-amber-400 mt-1">{warn}</p>}
+        {info  && <p className="text-[11px] text-white/40 mt-1">{info}</p>}
       </div>
     );
-  },
+  }
 );
 
 InputPhone5.displayName = "InputPhone5";
@@ -91,47 +88,35 @@ type CountrySelectProps = {
   options: { value: string; label: string; divider: boolean }[];
 };
 
-const CountrySelect = ({ value, onChange, options }: CountrySelectProps) => {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <Trigger
-        className={cn(
-          "relative mr-0.5 focus:z-10 stroke-ring flex h-9 w-[90px] items-center justify-between rounded-l-lg border border-r-0 border-input bg-background px-4 py-1 text-sm ring-offset-background placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 [&>span]:line-clamp-1",
-        )}
-      >
-        <SelectValue placeholder={<span className="text-xs">🏁 Intl</span>}>
-          <div className="flex items-center gap-1">
-            <FlagIcon
-              className="rounded-full overflow-hidden w-4 h-4 shrink-0"
-              code={value as FlagIconCode}
-              size={16}
-            />
-            {value ? `+${getCountryCallingCode(value)}` : null}
-          </div>
-        </SelectValue>
-      </Trigger>
-      <SelectContent>
-        <SelectGroup>
-          <SelectLabel>Countries</SelectLabel>
-          {options.map(({ value, label }) => (
-            <SelectItem className="flex items-center" key={value} value={value}>
-              <div className="flex items-center gap-1">
-                {value ? (
-                  <FlagIcon
-                    className="rounded-full overflow-hidden w-5 h-5 shrink-0 mr-2"
-                    code={value as FlagIconCode}
-                    size={20}
-                  />
-                ) : (
-                  <span className="mr-2">🏁</span>
-                )}
-                {label}
-                {value ? ` +${getCountryCallingCode(value as Country)}` : null}
-              </div>
+const CountrySelect = ({ value, onChange, options }: CountrySelectProps) => (
+  <Select value={value} onValueChange={onChange}>
+    <SelectPrimitive.Trigger
+      className="relative mr-0.5 focus:z-10 flex h-9 w-[90px] items-center justify-between rounded-l-lg border border-r-0 border-white/[0.08] bg-white/[0.04] px-3 py-1 text-sm text-white focus:outline-none focus:ring-1 focus:ring-[#d4a5ff]/50 disabled:opacity-50"
+    >
+      <SelectValue placeholder="🌐">
+        <span className="flex items-center gap-1 text-sm">
+          <span>{countryToEmoji(value)}</span>
+          <span className="text-xs text-white/60">
+            {value ? `+${getCountryCallingCode(value)}` : ""}
+          </span>
+        </span>
+      </SelectValue>
+    </SelectPrimitive.Trigger>
+    <SelectContent className="max-h-64">
+      <SelectGroup>
+        <SelectLabel>Country</SelectLabel>
+        {options
+          .filter((o) => o.value)
+          .map(({ value: v, label }) => (
+            <SelectItem key={v} value={v} className="flex items-center gap-2">
+              <span className="mr-1">{countryToEmoji(v)}</span>
+              <span className="truncate max-w-[120px]">{label}</span>
+              <span className="text-xs text-white/40 ml-auto">
+                +{(() => { try { return getCountryCallingCode(v as Country); } catch { return ""; } })()}
+              </span>
             </SelectItem>
           ))}
-        </SelectGroup>
-      </SelectContent>
-    </Select>
-  );
-};
+      </SelectGroup>
+    </SelectContent>
+  </Select>
+);

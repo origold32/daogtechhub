@@ -51,7 +51,7 @@ export function InputOtpV1(properties: InputOtpV1Props) {
         autoFocus={false}
         maxLength={maxLength}
         disabled={disabled}
-        onComplete={(args) => console.log("on complete", args)}
+        onComplete={() => {}}
         {...props}
       >
         <InputOTPGroup>

@@ -2,9 +2,10 @@
 
 "use client";
 
-import { useRef, RefObject } from "react";
+import { useRef, RefObject, useEffect } from "react";
 import { Smartphone, Star, Gauge, Home } from "lucide-react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Suspense } from "react";
 
 import { Navigation } from "./components/Navigation";
 import { HeroSection } from "./components/HeroSection";
@@ -13,10 +14,34 @@ import { WhySection } from "./components/WhySection";
 import { ContactSection } from "./components/ContactSection";
 import { WhatsAppFloat } from "./components/WhatsAppFloat";
 import FooterSection from "./components/FooterSection";
+import { JsonLd, organizationSchema, websiteSchema } from "@/components/seo/JsonLd";
+
+// Intercepts ?code= / ?token_hash= params that Supabase sometimes sends to the
+// site root instead of /auth/callback (happens when emailRedirectTo isn't set).
+function AuthCodeRedirect() {
+  const router       = useRouter();
+  const searchParams = useSearchParams();
+
+  useEffect(() => {
+    const code      = searchParams.get("code");
+    const tokenHash = searchParams.get("token_hash");
+    const error     = searchParams.get("error");
+
+    if (code || tokenHash) {
+      // Forward ALL params so the callback handler has everything it needs
+      const dest = new URLSearchParams();
+      searchParams.forEach((v, k) => dest.set(k, v));
+      router.replace(`/auth/callback?${dest.toString()}`);
+    } else if (error) {
+      router.replace(`/auth?error=${encodeURIComponent(error)}`);
+    }
+  }, [searchParams, router]);
+
+  return null;
+}
 
 export default function Page() {
   const router = useRouter();
-  // Refs for nav scroll-to and hero CTA
   const heroRef = useRef<HTMLElement>(null);
   const gadgetsRef = useRef<HTMLElement>(null);
   const jerseysRef = useRef<HTMLElement>(null);
@@ -28,10 +53,7 @@ export default function Page() {
     { label: "Gadgets", ref: gadgetsRef as RefObject<HTMLElement | null> },
     { label: "Jerseys", ref: jerseysRef as RefObject<HTMLElement | null> },
     { label: "Cars", ref: carsRef as RefObject<HTMLElement | null> },
-    {
-      label: "Real Estate",
-      ref: realEstateRef as RefObject<HTMLElement | null>,
-    },
+    { label: "Real Estate", ref: realEstateRef as RefObject<HTMLElement | null> },
     { label: "Contact", ref: contactRef as RefObject<HTMLElement | null> },
   ];
 
@@ -40,6 +62,11 @@ export default function Page() {
 
   return (
     <div className="relative">
+      {/* Intercepts ?code= / ?error= params Supabase sends to site root */}
+      <Suspense fallback={null}>
+        <AuthCodeRedirect />
+      </Suspense>
+
       <div className="grain-overlay" />
 
       <Navigation links={navLinks} />
@@ -115,6 +142,7 @@ export default function Page() {
       <FooterSection />
 
       <WhatsAppFloat />
+      <JsonLd data={[organizationSchema(), websiteSchema()]} />
     </div>
   );
 }

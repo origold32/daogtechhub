@@ -5,7 +5,6 @@ export const removeNonNumeric = (num: string | number) => {
   if (formattedNo) {
     return parseInt(formattedNo);
   } else {
-    console.log("returning 0");
     return "";
   }
 };

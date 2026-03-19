@@ -8,7 +8,18 @@ import TableHeadCol from "@/components/table/TableHeadCol";
 import TableBodyRow from "@/components/table/TableBodyRow";
 import TableBodyCol from "@/components/table/TableBodyCol";
 import TablePagination2 from "@/components/table/TablePagination2";
-import { useThrottledCallback } from "@mantine/hooks";
+import { useRef, useCallback } from "react";
+// Native throttle hook - replaces @mantine/hooks
+function useThrottledCallback<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  const lastRun = useRef(0);
+  return useCallback((...args: Parameters<T>) => {
+    const now = Date.now();
+    if (now - lastRun.current >= delay) {
+      lastRun.current = now;
+      return fn(...args);
+    }
+  }, [fn, delay]) as T;
+}
 import InputSearch from "../reusables/input-search";
 import useTableDataController from "./useTableDataController";
 import CurrencyAmount from "../reusables/currency-amount";

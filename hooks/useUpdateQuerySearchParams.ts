@@ -9,14 +9,12 @@ export default function useUrlQueryParams() {
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    console.log("search param change", searchParams);
   }, [searchParams]);
 
   const createQueryString = useCallback(
     (name: string, value: string) => {
       const params = new URLSearchParams(searchParams?.toString());
       params.set(name, value);
-      console.log("create ig querystring", name, value, params.toString());
 
       return params.toString();
     },
@@ -26,7 +24,6 @@ export default function useUrlQueryParams() {
   // wrapped
   const setQueryParam = useCallback(
     (name: string, value: string | number, push?: boolean): void => {
-      console.log("in query updateder", name, value);
       if (push) {
         router.push(pathname + "?" + createQueryString(name, `${value}`), { scroll: false });
       } else {

@@ -1,6 +1,17 @@
 "use client";
 import React from "react";
-import { useThrottledCallback } from "@mantine/hooks";
+import { useRef, useCallback } from "react";
+// Native throttle - replaces @mantine/hooks dependency
+function useThrottledCallback<T extends (...args: any[]) => any>(fn: T, delay: number): T {
+  const lastRun = useRef(0);
+  return useCallback((...args: Parameters<T>) => {
+    const now = Date.now();
+    if (now - lastRun.current >= delay) {
+      lastRun.current = now;
+      return fn(...args);
+    }
+  }, [fn, delay]) as T;
+}
 import InputSearch from "./input-search";
 import useTableDataController from "../table/useTableDataController";
 import Loader3 from "../loaders/loader-3";

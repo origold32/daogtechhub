@@ -37,7 +37,6 @@ export const createRemoteMutationFetcher = (type: apiMethodWithoutGet) => {
 export const logger: Middleware =
   (useSWRNext: SWRHook) => (key, fetcher, config) => {
     const extendedFetcher = (...args: Arguments[]) => {
-      console.log("SWR Request:", key);
 
       // @ts-ignore
       return fetcher(...args);
