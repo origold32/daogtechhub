@@ -5,6 +5,10 @@
 import { NextRequest } from "next/server";
 import { ok, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
+import type { Database } from "@/types/database";
+
+type SwapStatus = Database["public"]["Tables"]["swap_requests"]["Row"]["status"];
+const VALID_STATUSES: SwapStatus[] = ["pending", "under_review", "approved", "rejected", "completed"];
 
 export async function GET(req: NextRequest) {
   try {
@@ -12,7 +16,7 @@ export async function GET(req: NextRequest) {
     if (auth.error) return auth.error;
 
     const { searchParams } = new URL(req.url);
-    const status = searchParams.get("status") ?? "all";
+    const statusParam = searchParams.get("status") ?? "all";
     const { page, pageSize, from, to } = parsePagination(searchParams);
 
     let query = auth.supabase
@@ -21,7 +25,9 @@ export async function GET(req: NextRequest) {
       .order("created_at", { ascending: false })
       .range(from, to);
 
-    if (status !== "all") query = query.eq("status", status);
+    // Validate statusParam against the SwapStatus union before passing to .eq()
+    const status = VALID_STATUSES.find((s) => s === statusParam);
+    if (status) query = query.eq("status", status);
 
     const { data, error, count } = await query;
     if (error) return serverError(error);
