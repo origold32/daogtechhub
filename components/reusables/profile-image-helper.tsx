@@ -1,341 +1,167 @@
 "use client";
 
-import { useState, useRef, useCallback, useEffect } from "react";
-import { Camera, CloudUpload, X, Check, Loader2 } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { toast } from "sonner";
-import { useFileUpload } from "@/hooks/useFileUpload";
-import OverlayManager from "@/components/reusables/overlay-manager";
-import useSWRMutation from "swr/mutation";
-import { createRemoteMutationFetcher } from "@/swr";
+import { useRef, useState, useCallback } from "react";
 import Image from "next/image";
+import { Camera, Loader2, X } from "lucide-react";
+import { toast } from "sonner";
+import useSWRMutation from "swr/mutation";
+import { useFileUpload } from "@/hooks/useFileUpload";
+import { createRemoteMutationFetcher } from "@/swr";
+import CircularUploadProgress from "@/components/loaders/circular-upload-progress";
+
+const UPDATE_ENDPOINT = "/api/auth/me";
+const BUCKET          = "avatars";
+const MAX_SIZE_MB     = 5;
 
 interface ProfileImageHelperProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess?: (imageUrl: string) => void;
-  currentImageUrl?: string;
-  updateEndpoint?: string;
+  /** Current avatar URL (can be undefined/null for fallback) */
+  currentAvatar?: string | null;
+  /** User's display name — used for initials fallback */
+  displayName?: string;
+  /** Called with the new public URL after a successful upload + profile update */
+  onAvatarUpdated?: (url: string) => void;
+  /** Size of the avatar circle in px (default 80) */
+  size?: number;
   className?: string;
 }
 
+function getInitials(name?: string): string {
+  if (!name) return "?";
+  return name
+    .split(" ")
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((w) => w[0].toUpperCase())
+    .join("");
+}
+
 export default function ProfileImageHelper({
-  isOpen,
-  onClose,
-  onSuccess,
-  currentImageUrl,
-  updateEndpoint = "",
+  currentAvatar,
+  displayName,
+  onAvatarUpdated,
+  size = 80,
   className = "",
 }: ProfileImageHelperProps) {
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  const [captureMode, setCaptureMode] = useState<"camera" | "upload" | null>(
-    null,
-  );
-  const [uploadedImageUrl, setUploadedImageUrl] = useState<string | null>(null);
-  const [showPreview, setShowPreview] = useState(false);
-
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const inputRef  = useRef<HTMLInputElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
   const { uploadFile, isUploading, progress } = useFileUpload();
   const { trigger: updateProfile, isMutating: isUpdatingProfile } =
-    useSWRMutation(updateEndpoint, createRemoteMutationFetcher("put"));
+    useSWRMutation(UPDATE_ENDPOINT, createRemoteMutationFetcher("put"));
 
-  const isProcessing = isUploading || isUpdatingProfile;
+  const [preview, setPreview] = useState<string | null>(null);
 
-  // File upload handler
-  const handleFileSelect = useCallback(
-    (event: React.ChangeEvent<HTMLInputElement>) => {
-      const file = event.target.files?.[0];
+  const isBusy = isUploading || isUpdatingProfile;
+
+  const handleFile = useCallback(
+    async (file: File) => {
       if (!file) return;
 
-      // Validate file type
       if (!file.type.startsWith("image/")) {
-        toast.error("Please select an image file");
+        toast.error("Please select an image file.");
         return;
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        toast.error("Image size must be less than 5MB");
+      if (file.size > MAX_SIZE_MB * 1024 * 1024) {
+        toast.error(`Image must be smaller than ${MAX_SIZE_MB} MB.`);
         return;
       }
 
-      setSelectedFile(file);
-      const url = URL.createObjectURL(file);
-      setPreviewUrl(url);
-      setShowPreview(true);
-      setCaptureMode("upload");
+      // Show local preview immediately
+      const objectUrl = URL.createObjectURL(file);
+      setPreview(objectUrl);
+
+      try {
+        const publicUrl = await uploadFile(file, "profile/");
+        if (!publicUrl) {
+          toast.error("Upload failed. Please try again.");
+          setPreview(null);
+          return;
+        }
+
+        await updateProfile({ avatarUrl: publicUrl });
+        onAvatarUpdated?.(publicUrl);
+        toast.success("Profile photo updated.");
+      } catch {
+        toast.error("Could not update profile photo.");
+        setPreview(null);
+      } finally {
+        URL.revokeObjectURL(objectUrl);
+        // Stop any active camera stream
+        streamRef.current?.getTracks().forEach((t) => t.stop());
+        streamRef.current = null;
+      }
     },
-    [],
+    [uploadFile, updateProfile, onAvatarUpdated]
   );
 
-  useEffect(() => {
-    if (captureMode === "camera" && streamRef.current && videoRef.current) {
-      const video = videoRef.current;
-      video.srcObject = streamRef.current;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    e.target.value = "";
+  };
 
-      const handleLoadedMetadata = () => {
-        video.play().catch(console.error);
-      };
-
-      video.addEventListener("loadedmetadata", handleLoadedMetadata);
-
-      return () => {
-        video.removeEventListener("loadedmetadata", handleLoadedMetadata);
-      };
-    }
-  }, [captureMode]);
-
-  // Updated startCamera function with better error handling and video setup
-  const startCamera = useCallback(async () => {
-    try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: {
-          facingMode: "user",
-          width: { ideal: 640 },
-          height: { ideal: 480 },
-        },
-      });
-
-      streamRef.current = stream;
-      setCaptureMode("camera");
-    } catch {
-      toast.error("Camera access denied. Please allow camera permissions.");
-    }
-  }, []);
-
-  const stopCamera = useCallback(() => {
-    if (streamRef.current) {
-      streamRef.current.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    }
-  }, []);
-
-  // Reset state when modal closes
-  const handleClose = useCallback(() => {
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setCaptureMode(null);
-    setUploadedImageUrl(null);
-    setShowPreview(false);
-    stopCamera();
-    onClose();
-  }, [onClose, stopCamera]);
-  const capturePhoto = useCallback(() => {
-    if (!videoRef.current || !canvasRef.current) return;
-
-    const canvas = canvasRef.current;
-    const video = videoRef.current;
-    const context = canvas.getContext("2d");
-
-    if (!context) return;
-
-    canvas.width = video.videoWidth;
-    canvas.height = video.videoHeight;
-    context.drawImage(video, 0, 0);
-
-    canvas.toBlob(
-      (blob) => {
-        if (blob) {
-          const file = new File([blob], "camera-photo.jpg", {
-            type: "image/jpeg",
-          });
-          setSelectedFile(file);
-          const url = URL.createObjectURL(file);
-          setPreviewUrl(url);
-          setShowPreview(true);
-          stopCamera();
-        }
-      },
-      "image/jpeg",
-      0.8,
-    );
-  }, [stopCamera]);
-
-  // Upload the selected image to storage
-  const handleUploadImage = useCallback(async () => {
-    if (!selectedFile) return;
-
-    try {
-      const formData = new FormData();
-      formData.append("file", selectedFile);
-
-      const response = await uploadFile(formData);
-
-      if (response?.data?.url) {
-        setUploadedImageUrl(response.data.url);
-        toast.success("Image uploaded successfully!");
-      } else {
-        throw new Error("Upload failed");
-      }
-    } catch {
-      toast.error("Failed to upload image");
-    }
-  }, [selectedFile, uploadFile]);
-
-  // Submit the uploaded image URL to update profile
-  const handleSubmitProfile = useCallback(async () => {
-    if (!uploadedImageUrl) return;
-
-    try {
-      await updateProfile({ photo: uploadedImageUrl });
-      toast.success("Profile image updated successfully!");
-      onSuccess?.(uploadedImageUrl);
-      handleClose();
-    } catch {
-      toast.error("Failed to update profile image");
-    }
-  }, [uploadedImageUrl, updateProfile, onSuccess, handleClose]);
-
-  // Reset to selection mode
-  const handleRetake = useCallback(() => {
-    setSelectedFile(null);
-    setPreviewUrl(null);
-    setUploadedImageUrl(null);
-    setShowPreview(false);
-    setCaptureMode(null);
-  }, []);
+  const avatarSrc = preview ?? currentAvatar ?? null;
 
   return (
-    <>
+    <div className={`relative inline-block ${className}`} style={{ width: size, height: size }}>
+      {/* Avatar circle */}
+      <div
+        className="w-full h-full rounded-full overflow-hidden border-2 border-lilac/30 bg-lilac/10 flex items-center justify-center"
+        style={{ width: size, height: size }}
+      >
+        {avatarSrc ? (
+          <Image
+            src={avatarSrc}
+            alt={displayName ?? "Profile photo"}
+            fill
+            className="object-cover rounded-full"
+            sizes={`${size}px`}
+            unoptimized
+          />
+        ) : (
+          <span
+            className="text-lilac font-bold select-none"
+            style={{ fontSize: size * 0.32 }}
+          >
+            {getInitials(displayName)}
+          </span>
+        )}
+      </div>
+
+      {/* Upload progress overlay */}
+      {isBusy && (
+        <div className="absolute inset-0 rounded-full bg-black/50 flex items-center justify-center">
+          {isUploading ? (
+            <CircularUploadProgress progress={progress} size={size * 0.7} strokeWidth={3} />
+          ) : (
+            <Loader2 className="text-lilac animate-spin" style={{ width: size * 0.3, height: size * 0.3 }} />
+          )}
+        </div>
+      )}
+
+      {/* Camera button */}
+      {!isBusy && (
+        <button
+          type="button"
+          onClick={() => inputRef.current?.click()}
+          className="absolute bottom-0 right-0 flex items-center justify-center rounded-full bg-lilac text-deep-purple shadow-md hover:bg-lilac/90 transition-colors"
+          style={{ width: size * 0.32, height: size * 0.32 }}
+          aria-label="Change profile photo"
+        >
+          <Camera style={{ width: size * 0.16, height: size * 0.16 }} />
+        </button>
+      )}
+
+      {/* Hidden file input */}
       <input
-        title="Select Profile Image"
-        ref={fileInputRef}
+        ref={inputRef}
         type="file"
         accept="image/*"
-        onChange={handleFileSelect}
         className="hidden"
+        onChange={handleInputChange}
+        disabled={isBusy}
       />
-
-      <OverlayManager
-        isOpen={isOpen}
-        onClose={handleClose}
-        title="Update Profile Image"
-        caption="Take a photo or upload an image"
-        overlayClassName="max-w-lg space-y-2"
-        titleClassName="text-center"
-        captionClassName="text-center"
-        contentClassName="space-y-4 my-6"
-      >
-        {/* Selection Mode */}
-        {!captureMode && !showPreview && (
-          <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-              <Button
-                onClick={startCamera}
-                className="bg-gradient-to-r from-[#1B75BC] to-[#29ABE2] flex items-center gap-3 w-full"
-                disabled={isProcessing}
-              >
-                <Camera size={24} />
-                <span>Take Photo</span>
-              </Button>
-
-              <Button
-                onClick={() => fileInputRef.current?.click()}
-                className="bg-gradient-to-r from-[#1B75BC] to-[#29ABE2] flex items-center gap-3 w-full"
-                disabled={isProcessing}
-              >
-                <CloudUpload size={24} />
-                <span>Upload Photo</span>
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Camera Mode */}
-        {captureMode === "camera" && !showPreview && (
-          <div className="space-y-4">
-            <div className="relative">
-              <video
-                ref={videoRef}
-                className="w-full h-64 object-cover rounded-lg bg-gray-100"
-                autoPlay
-                playsInline
-                muted
-                controls={false}
-                style={{ transform: "scaleX(-1)" }} // Mirror the video for selfie view
-              />
-              <canvas ref={canvasRef} className="hidden" />
-            </div>
-
-            <div className="flex gap-2">
-              <Button onClick={capturePhoto} className="flex-1">
-                <Camera className="mr-2" size={16} />
-                Capture Photo
-              </Button>
-              <Button onClick={handleRetake} variant="destructive">
-                <X className="mr-2" size={16} />
-                Cancel
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* Preview Mode */}
-        {showPreview && previewUrl && (
-          <div className="space-y-4">
-            <div className="relative">
-              <Image
-                src={previewUrl}
-                alt="Preview"
-                className="w-full h-64 object-cover rounded-lg"
-                width={256}
-                height={256}
-              />
-            </div>
-
-            {/* Upload Progress */}
-            {isUploading && (
-              <div className="flex flex-col items-center space-y-2 w-full">
-                <div className="w-full h-2 bg-white/10 rounded-full overflow-hidden">
-                  <div
-                    className="h-full bg-lilac transition-all"
-                    style={{ width: `${Math.min(progress, 100)}%` }}
-                  />
-                </div>
-                <p className="text-sm text-gray-200">
-                  Uploading image... {progress}%
-                </p>
-              </div>
-            )}
-
-            {/* Profile Update Progress */}
-            {isUpdatingProfile && (
-              <div className="flex flex-col items-center space-y-2">
-                <Loader2 className="h-5 w-5 animate-spin text-lilac" />
-                <p className="text-sm text-gray-200">Updating profile...</p>
-              </div>
-            )}
-
-            {/* Action Buttons */}
-            <div className="flex gap-2">
-              {!uploadedImageUrl && !isProcessing && (
-                <>
-                  <Button onClick={handleUploadImage} className="flex-1">
-                    <CloudUpload className="mr-2" size={16} />
-                    Upload Image
-                  </Button>
-                  <Button onClick={handleRetake} variant="destructive">
-                    <X className="mr-2" size={16} />
-                    Retake
-                  </Button>
-                </>
-              )}
-
-              {uploadedImageUrl && !isUpdatingProfile && (
-                <Button onClick={handleSubmitProfile} className="flex-1">
-                  <Check className="mr-2" size={16} />
-                  Update Profile
-                </Button>
-              )}
-            </div>
-          </div>
-        )}
-      </OverlayManager>
-    </>
+    </div>
   );
 }

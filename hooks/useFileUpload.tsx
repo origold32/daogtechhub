@@ -4,15 +4,19 @@
 import { useState, useCallback, useRef } from "react";
 import { createClient } from "@/supabase/client";
 
-interface UseFileUploadReturn {
+export interface UseFileUploadReturn {
   /** 0–100 upload progress */
   progress: number;
   /** True while an upload is in flight */
   uploading: boolean;
+  /** Alias for uploading (used by some consumers) */
+  isUploading: boolean;
   /** Public URL of the last successfully uploaded file, or null */
   uploadedUrl: string | null;
   /** Start uploading a File — resolves with the public URL or null on error */
   upload: (file: File, pathPrefix?: string) => Promise<string | null>;
+  /** Alias for upload (used by some consumers) */
+  uploadFile: (file: File, pathPrefix?: string) => Promise<string | null>;
   /** Reset state back to idle */
   reset: () => void;
 }
@@ -20,15 +24,15 @@ interface UseFileUploadReturn {
 /**
  * Uploads a file to a Supabase Storage bucket and returns its public URL.
  *
- * @param bucket  The Supabase storage bucket name.
+ * @param bucket  The Supabase storage bucket name (default: "avatars").
  *
  * Usage:
  *   const { upload, progress, uploading } = useFileUpload("avatars");
- *   const url = await upload(file);
+ *   const { uploadFile, isUploading, progress } = useFileUpload();
  */
-export function useFileUpload(bucket: string): UseFileUploadReturn {
-  const [progress, setProgress]     = useState(0);
-  const [uploading, setUploading]   = useState(false);
+export function useFileUpload(bucket = "avatars"): UseFileUploadReturn {
+  const [progress, setProgress]       = useState(0);
+  const [uploading, setUploading]     = useState(false);
   const [uploadedUrl, setUploadedUrl] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
@@ -97,5 +101,13 @@ export function useFileUpload(bucket: string): UseFileUploadReturn {
     [bucket]
   );
 
-  return { progress, uploading, uploadedUrl, upload, reset };
+  return {
+    progress,
+    uploading,
+    isUploading: uploading,   // alias
+    uploadedUrl,
+    upload,
+    uploadFile: upload,       // alias
+    reset,
+  };
 }
