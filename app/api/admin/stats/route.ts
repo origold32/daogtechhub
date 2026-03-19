@@ -13,7 +13,7 @@ export async function GET() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
-    // Count queries — all use head:true, TypeScript infers them uniformly
+    // Count queries — all head:true, TypeScript infers them uniformly
     const [
       { count: totalOrders },
       { count: ordersThisMonth },
@@ -34,23 +34,26 @@ export async function GET() {
       supabase.from("real_estates").select("*", { count: "exact", head: true }).eq("is_available", true),
     ]);
 
-    // Sequential awaits give TypeScript full independent type inference per query
-    const revenueResult = await supabase
+    // .returns<T>() explicitly declares the row shape — the documented Supabase API
+    // for cases where column-filtered selects cannot be inferred from the schema.
+    const { data: revenueData } = await supabase
       .from("orders")
       .select("total_amount")
-      .neq("status", "cancelled");
+      .neq("status", "cancelled")
+      .returns<Array<{ total_amount: number }>>();
 
-    const monthlyRevenueResult = await supabase
+    const { data: monthlyRevenueData } = await supabase
       .from("orders")
       .select("total_amount")
       .gte("created_at", startOfMonth)
-      .neq("status", "cancelled");
+      .neq("status", "cancelled")
+      .returns<Array<{ total_amount: number }>>();
 
-    const totalRevenue = (revenueResult.data ?? []).reduce(
+    const totalRevenue = (revenueData ?? []).reduce(
       (sum, o) => sum + (o.total_amount ?? 0),
       0
     );
-    const revenueThisMonth = (monthlyRevenueResult.data ?? []).reduce(
+    const revenueThisMonth = (monthlyRevenueData ?? []).reduce(
       (sum, o) => sum + (o.total_amount ?? 0),
       0
     );
