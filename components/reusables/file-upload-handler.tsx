@@ -1,10 +1,7 @@
-/* eslint-disable react-hooks/exhaustive-deps */
 "use client";
 
-import React, { useState, useCallback } from "react";
-import { X, FileText, ExternalLink } from "lucide-react";
-import Image from "next/image";
-import Link from "next/link";
+import { useRef, useState } from "react";
+import { Upload, X, FileText, ImageIcon, Video } from "lucide-react";
 import { toast } from "sonner";
 import { useFileUpload } from "@/hooks/useFileUpload";
 import CircularUploadProgress from "@/components/loaders/circular-upload-progress";
@@ -12,375 +9,151 @@ import LinearUploadProgress from "@/components/loaders/linear-upload-progress";
 
 export type FileType = "image" | "video" | "document";
 
-export interface UploadedFile {
-  file: File;
-  url: string;
-  type: FileType;
-}
-
-export interface FileUploadHandlerProps {
-  // Upload configuration
-  allowedTypes?: FileType[];
-  maxSizeMB?: number;
-  multiple?: boolean;
-  maxFiles?: boolean; // Whether to enable file limiting
-  fileLimit?: number; // Number of files allowed when maxFiles is true
-
-  // UI configuration
-  showPreview?: boolean;
-  showProgress?: boolean;
-
-  // Callbacks
-  onFileUpload?: (files: UploadedFile[]) => void;
-  onFileRemove?: (fileIndex: number) => void;
-  onError?: (error: string) => void;
-  onUploadStart?: () => void;
-  onUploadComplete?: () => void;
-
-  // State
-  uploadedFiles?: UploadedFile[];
-  disabled?: boolean;
-
-  // Styling
+interface FileUploadHandlerProps {
+  /** Which kind of file to accept */
+  fileType?: FileType;
+  /** Supabase storage bucket name */
+  bucket: string;
+  /** Called with the public URL after a successful upload */
+  onUploadComplete: (url: string) => void;
+  /** Optional extra class names for the outer wrapper */
   className?: string;
-  previewClassName?: string;
-
-  // Children - render prop for custom upload UI
-  children?: (props: {
-    handleFileUpload: (files: File | File[] | null) => void;
-    isUploading: boolean;
-    progress: number;
-    disabled: boolean;
-    canAddMore: boolean;
-    filesCount: number;
-    maxFiles: boolean;
-    fileLimit: number;
-    isLimitReached: boolean;
-  }) => React.ReactNode;
+  /** Progress indicator style */
+  progressVariant?: "circular" | "linear";
+  /** Label shown inside the drop zone */
+  label?: string;
+  /** Max file size in MB (default: 10) */
+  maxSizeMB?: number;
+  /** Whether the control is disabled */
+  disabled?: boolean;
 }
 
-const FileUploadHandler: React.FC<FileUploadHandlerProps> = ({
-  allowedTypes = ["image", "video", "document"],
-  maxSizeMB = 50,
-  multiple = false,
-  maxFiles = false, // Default to no file limiting
-  fileLimit = 5, // Default limit when maxFiles is enabled
-  showPreview = true,
-  showProgress = true,
-  onFileUpload,
-  onFileRemove,
-  onError,
-  onUploadStart,
+const ACCEPT_MAP: Record<FileType, string> = {
+  image:    "image/*",
+  video:    "video/*",
+  document: ".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,.txt,.csv",
+};
+
+const ICON_MAP: Record<FileType, React.ElementType> = {
+  image:    ImageIcon,
+  video:    Video,
+  document: FileText,
+};
+
+export default function FileUploadHandler({
+  fileType = "image",
+  bucket,
   onUploadComplete,
-  uploadedFiles = [],
-  disabled = false,
   className = "",
-  previewClassName = "",
-  children,
-}) => {
-  const { uploadFile, isUploading, progress } = useFileUpload();
-  const [localFiles, setLocalFiles] = useState<UploadedFile[]>([]);
+  progressVariant = "linear",
+  label,
+  maxSizeMB = 10,
+  disabled = false,
+}: FileUploadHandlerProps) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [dragging, setDragging] = useState(false);
+  const { upload, progress, uploading, reset } = useFileUpload(bucket);
 
-  // Determine if we're using controlled mode (external state) or uncontrolled mode (internal state)
-  const isControlled = onFileUpload !== undefined;
-  const files = isControlled ? uploadedFiles : localFiles;
+  const TypeIcon = ICON_MAP[fileType];
 
-  const updateFiles = useCallback(
-    (newFiles: UploadedFile[]) => {
-      if (isControlled) {
-        onFileUpload?.(newFiles);
-      } else {
-        setLocalFiles(newFiles);
-      }
-    },
-    [isControlled, onFileUpload]
-  );
-
-  // Calculate if limit is reached
-  const isLimitReached = maxFiles ? files.length >= fileLimit : false;
-  const canAddMore = !isLimitReached;
-
-  const getFileType = (file: File): FileType => {
-    if (file.type.startsWith("image/")) return "image";
-    if (file.type.startsWith("video/")) return "video";
-    return "document";
-  };
-
-  const validateFile = (file: File): boolean => {
-    const fileType = getFileType(file);
-
-    if (!allowedTypes.includes(fileType)) {
-      const error = `${fileType} files are not allowed. Allowed types: ${allowedTypes.join(
-        ", "
-      )}`;
-      onError?.(error);
-      toast.error(error);
-      return false;
-    }
+  const handleFile = async (file: File) => {
+    if (!file) return;
 
     if (file.size > maxSizeMB * 1024 * 1024) {
-      const error = `File size must be less than ${maxSizeMB}MB`;
-      onError?.(error);
-      toast.error(error);
-      return false;
+      toast.error(`File must be smaller than ${maxSizeMB} MB.`);
+      return;
     }
 
-    return true;
+    try {
+      const url = await upload(file);
+      if (url) {
+        onUploadComplete(url);
+        toast.success("File uploaded successfully.");
+      }
+    } catch {
+      toast.error("Upload failed. Please try again.");
+    }
   };
 
-  const handleFileUpload = useCallback(
-    async (selectedFiles: File | File[] | null) => {
-      if (!selectedFiles || disabled) return;
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+    // reset input so the same file can be re-selected
+    e.target.value = "";
+  };
 
-      const filesToUpload = Array.isArray(selectedFiles)
-        ? selectedFiles
-        : [selectedFiles];
-
-      // Check file limit (if maxFiles is enabled)
-      if (maxFiles && files.length + filesToUpload.length > fileLimit) {
-        const error = `Maximum ${fileLimit} files allowed`;
-        onError?.(error);
-        toast.error(error);
-        return;
-      }
-
-      // Validate all files first
-      const validFiles = filesToUpload.filter(validateFile);
-      if (validFiles.length === 0) return;
-
-      try {
-        onUploadStart?.();
-
-        const uploadPromises = validFiles.map(async (file) => {
-          const formData = new FormData();
-          formData.append("file", file);
-          const response = await uploadFile(formData);
-
-          if (response?.data?.url) {
-            return {
-              file,
-              url: response.data.url,
-              type: getFileType(file),
-            } as UploadedFile;
-          } else {
-            throw new Error(`Failed to upload ${file.name}`);
-          }
-        });
-
-        const uploadedFiles = await Promise.all(uploadPromises);
-        const newFiles = [...files, ...uploadedFiles];
-        updateFiles(newFiles);
-
-        toast.success(`${uploadedFiles.length} file(s) uploaded successfully`);
-        onUploadComplete?.();
-      } catch (error) {
-        const errorMessage =
-          error instanceof Error ? error.message : "Failed to upload files";
-        onError?.(errorMessage);
-        toast.error(errorMessage);
-      }
-    },
-    [
-      files,
-      disabled,
-      maxFiles,
-      fileLimit,
-      allowedTypes,
-      maxSizeMB,
-      uploadFile,
-      onError,
-      onUploadStart,
-      onUploadComplete,
-      updateFiles,
-    ]
-  );
-
-  const handleFileRemove = useCallback(
-    (index: number) => {
-      const newFiles = files.filter((_, i) => i !== index);
-      updateFiles(newFiles);
-      onFileRemove?.(index);
-    },
-    [files, onFileRemove, updateFiles]
-  );
-
-  const renderFilePreview = (uploadedFile: UploadedFile, index: number) => {
-    const { file, url, type } = uploadedFile;
-
-    return (
-      <div
-        key={index}
-        className={`relative border rounded-md overflow-hidden ${previewClassName}`}
-      >
-        <button
-          onClick={() => handleFileRemove(index)}
-          className="absolute top-2 right-2 bg-red-500 hover:bg-red-600 text-white rounded-full p-1 z-10"
-          aria-label="Remove file"
-        >
-          <X size={12} />
-        </button>
-
-        <Link
-          href={url}
-          target="_blank"
-          rel="noopener noreferrer"
-          className="absolute top-2 left-2 bg-blue-500 hover:bg-blue-600 text-white rounded-full p-1 z-10"
-          aria-label="View file in new tab"
-        >
-          <ExternalLink size={12} />
-        </Link>
-
-        {type === "image" && (
-          <div className="relative w-full h-48">
-            <Image src={url} alt={file.name} fill className="object-cover" />
-          </div>
-        )}
-
-        {type === "video" && (
-          <video src={url} controls className="w-full h-48 object-cover" />
-        )}
-
-        {type === "document" && (
-          <div className="p-4 bg-gray-50">
-            <div className="flex items-center gap-2 mb-2">
-              <FileText size={16} className="text-blue-500 flex-shrink-0" />
-              <span
-                className="text-sm text-gray-600 truncate"
-                title={file.name}
-              >
-                {file.name}
-              </span>
-            </div>
-            <iframe
-              src={url}
-              className="w-full h-32 border rounded"
-              title={file.name}
-            />
-          </div>
-        )}
-
-        <div className="p-2 bg-white border-t">
-          <p className="text-xs text-gray-600 truncate" title={file.name}>
-            {file.name}
-          </p>
-          <p className="text-xs text-gray-500">
-            {(file.size / 1024 / 1024).toFixed(2)} MB
-          </p>
-        </div>
-      </div>
-    );
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    setDragging(false);
+    if (disabled || uploading) return;
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
   };
 
   return (
-    <div className={`space-y-4 ${className}`}>
-      {/* Upload Progress */}
-      {showProgress && isUploading && (
-        <div className="flex flex-col items-center justify-center py-8 space-y-4">
-          {allowedTypes.includes("document") ? (
-            <LinearUploadProgress progress={progress} />
+    <div className={`w-full ${className}`}>
+      {/* Drop zone */}
+      <div
+        onClick={() => !disabled && !uploading && inputRef.current?.click()}
+        onDragOver={(e) => { e.preventDefault(); if (!disabled && !uploading) setDragging(true); }}
+        onDragLeave={() => setDragging(false)}
+        onDrop={handleDrop}
+        className={[
+          "relative flex flex-col items-center justify-center gap-3 rounded-2xl border-2 border-dashed px-6 py-8 transition-colors cursor-pointer select-none",
+          dragging
+            ? "border-lilac bg-lilac/10"
+            : "border-white/15 bg-white/5 hover:border-lilac/50 hover:bg-white/8",
+          disabled || uploading ? "opacity-50 cursor-not-allowed" : "",
+        ].join(" ")}
+      >
+        {uploading ? (
+          progressVariant === "circular" ? (
+            <CircularUploadProgress progress={progress} size={56} />
           ) : (
-            <CircularUploadProgress progress={progress} />
-          )}
-          <p className="text-sm text-gray-600">
-            Uploading files... {progress}%
-          </p>
-        </div>
+            <div className="w-full max-w-xs">
+              <LinearUploadProgress
+                progress={progress}
+                label="Uploading…"
+                showPercentage
+              />
+            </div>
+          )
+        ) : (
+          <>
+            <div className="flex h-12 w-12 items-center justify-center rounded-full bg-lilac/10">
+              <TypeIcon className="w-6 h-6 text-lilac" />
+            </div>
+            <div className="text-center">
+              <p className="text-sm font-medium text-soft-white">
+                {label ?? `Upload ${fileType}`}
+              </p>
+              <p className="mt-1 text-xs text-muted-lavender">
+                Drag & drop or click · max {maxSizeMB} MB
+              </p>
+            </div>
+            <Upload className="absolute bottom-3 right-3 w-4 h-4 text-muted-lavender opacity-40" />
+          </>
+        )}
+      </div>
+
+      {/* Cancel / reset while uploading */}
+      {uploading && (
+        <button
+          onClick={reset}
+          className="mt-2 flex items-center gap-1 text-xs text-muted-lavender hover:text-red-400 transition-colors"
+        >
+          <X className="w-3 h-3" /> Cancel
+        </button>
       )}
 
-      {/* Custom Upload UI via children render prop */}
-      {children && (
-        <div>
-          {children({
-            handleFileUpload,
-            isUploading,
-            progress,
-            disabled: disabled || !canAddMore,
-            canAddMore,
-            filesCount: files.length,
-            maxFiles,
-            fileLimit,
-            isLimitReached,
-          })}
-        </div>
-      )}
-
-      {/* File limit warning - only shows if maxFiles is enabled and limit reached */}
-      {maxFiles && isLimitReached && (
-        <p className="text-sm text-orange-600">
-          Maximum of {fileLimit} files allowed. You cannot add more files.
-        </p>
-      )}
-
-      {/* Preview Section */}
-      {showPreview && files.length > 0 && (
-        <div className="space-y-4">
-          <h4 className="text-sm font-medium text-gray-700">
-            Uploaded Files ({files.length}
-            {maxFiles ? `/${fileLimit}` : ""})
-          </h4>
-
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
-            {files.map((uploadedFile, index) =>
-              renderFilePreview(uploadedFile, index)
-            )}
-          </div>
-        </div>
-      )}
+      <input
+        ref={inputRef}
+        type="file"
+        accept={ACCEPT_MAP[fileType]}
+        className="hidden"
+        onChange={handleInputChange}
+        disabled={disabled || uploading}
+      />
     </div>
   );
-};
-
-// Custom hook for easier state management
-export const useFileUploadHandler = (initialFiles: UploadedFile[] = []) => {
-  const [files, setFiles] = useState<UploadedFile[]>(initialFiles);
-  const [errors, setErrors] = useState<string[]>([]);
-
-  const handleFileUpload = useCallback((uploadedFiles: UploadedFile[]) => {
-    setFiles(uploadedFiles);
-  }, []);
-
-  const handleFileRemove = useCallback((index: number) => {
-    setFiles((prev) => prev.filter((_, i) => i !== index));
-  }, []);
-
-  const handleError = useCallback((error: string) => {
-    setErrors((prev) => [...prev, error]);
-  }, []);
-
-  const clearErrors = useCallback(() => {
-    setErrors([]);
-  }, []);
-
-  const getFilesByType = useCallback(
-    (type: FileType) => {
-      return files.filter((file) => file.type === type);
-    },
-    [files]
-  );
-
-  const getUrls = useCallback(
-    (type?: FileType) => {
-      if (type) {
-        return files
-          .filter((file) => file.type === type)
-          .map((file) => file.url);
-      }
-      return files.map((file) => file.url);
-    },
-    [files]
-  );
-
-  return {
-    files,
-    setFiles,
-    errors,
-    clearErrors,
-    handleFileUpload,
-    handleFileRemove,
-    handleError,
-    getFilesByType,
-    getUrls,
-  };
-};
-
-export default FileUploadHandler;
+}
