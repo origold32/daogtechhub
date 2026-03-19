@@ -13,6 +13,7 @@ export async function GET() {
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
 
+    // Count queries — all use head:true, TypeScript infers them uniformly
     const [
       { count: totalOrders },
       { count: ordersThisMonth },
@@ -22,29 +23,21 @@ export async function GET() {
       { count: totalJerseys },
       { count: totalCars },
       { count: totalEstates },
-      revenueResult,
-      monthlyRevenueResult,
     ] = await Promise.all([
       supabase.from("orders").select("*", { count: "exact", head: true }),
-      supabase
-        .from("orders")
-        .select("*", { count: "exact", head: true })
-        .gte("created_at", startOfMonth),
+      supabase.from("orders").select("*", { count: "exact", head: true }).gte("created_at", startOfMonth),
       supabase.from("profiles").select("*", { count: "exact", head: true }).eq("role", "customer"),
-      supabase
-        .from("swap_requests")
-        .select("*", { count: "exact", head: true })
-        .eq("status", "pending"),
+      supabase.from("swap_requests").select("*", { count: "exact", head: true }).eq("status", "pending"),
       supabase.from("gadgets").select("*", { count: "exact", head: true }).eq("is_active", true),
       supabase.from("jerseys").select("*", { count: "exact", head: true }).eq("is_active", true),
       supabase.from("cars").select("*", { count: "exact", head: true }).eq("is_available", true),
       supabase.from("real_estates").select("*", { count: "exact", head: true }).eq("is_available", true),
+    ]);
+
+    // Revenue queries in their own Promise.all so TypeScript correctly infers the row shape
+    const [revenueResult, monthlyRevenueResult] = await Promise.all([
       supabase.from("orders").select("total_amount").neq("status", "cancelled"),
-      supabase
-        .from("orders")
-        .select("total_amount")
-        .gte("created_at", startOfMonth)
-        .neq("status", "cancelled"),
+      supabase.from("orders").select("total_amount").gte("created_at", startOfMonth).neq("status", "cancelled"),
     ]);
 
     const totalRevenue = (revenueResult.data ?? []).reduce(
@@ -56,7 +49,7 @@ export async function GET() {
       0
     );
 
-    // Recent orders
+    // Recent orders with customer names
     const { data: recentOrders } = await supabase
       .from("orders")
       .select("id, status, total_amount, created_at, user_id, profiles(first_name, last_name)")
@@ -71,9 +64,9 @@ export async function GET() {
       totalRevenue,
       revenueThisMonth,
       inventory: {
-        gadgets: totalGadgets,
-        jerseys: totalJerseys,
-        cars: totalCars,
+        gadgets:     totalGadgets,
+        jerseys:     totalJerseys,
+        cars:        totalCars,
         realEstates: totalEstates,
       },
       recentOrders: recentOrders ?? [],
