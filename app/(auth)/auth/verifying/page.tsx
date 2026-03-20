@@ -1,6 +1,7 @@
 // app/(auth)/auth/verifying/page.tsx
-// Used after Google OAuth callback and magic link clicks.
-// Waits for the auth store to confirm a live session, then redirects.
+// Handles two cases:
+//   1. ?code=XXX  → OAuth PKCE: exchange code client-side (browser has verifier)
+//   2. No code    → OTP/token_hash already exchanged server-side; just wait for session
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -24,64 +25,98 @@ function VerifyingContent() {
   const router  = useRouter();
   const params  = useSearchParams();
   const next    = params.get("next") ?? "/profile";
+  const code    = params.get("code");  // present for OAuth PKCE flow
+
   const { isAuthenticated, isHydrating } = useAuthStore();
 
   const [state,     setState]     = useState<State>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
-
-  // Handle implicit flow (#access_token in hash — set by Google OAuth)
-  useEffect(() => {
-    const hash = window.location.hash;
-    if (!hash) return;
-    const hp          = new URLSearchParams(hash.slice(1));
-    const accessToken  = hp.get("access_token");
-    const refreshToken = hp.get("refresh_token");
-    const errorDesc    = hp.get("error_description");
-    if (errorDesc) { setErrorMsg(decodeURIComponent(errorDesc).replace(/\+/g, " ")); setState("error"); return; }
-    if (accessToken && refreshToken) {
-      const supabase = createClient();
-      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
-        .catch(() => { setErrorMsg("Could not establish session. Please try signing in again."); setState("error"); });
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
-    }
-  }, []);
-
-  // Cycle status messages
-  useEffect(() => {
-    if (state !== "verifying") return;
-    const t = setInterval(() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1)), 900);
-    return () => clearInterval(t);
-  }, [state]);
-
-  // Watch auth store — redirect when session confirmed
-  useEffect(() => {
-    if (redirected.current || state === "error") return;
-    if (isHydrating) return; // still checking
-    if (isAuthenticated) {
-      redirected.current = true;
-      setState("success");
-      setTimeout(() => router.replace(next.startsWith("/") ? next : "/profile"), 700);
-    } else {
-      // Hydration done but not authenticated — session didn't take
-      setErrorMsg("Your sign-in link may have expired. Please request a new one.");
-      setState("error");
-    }
-  }, [isHydrating, isAuthenticated, next, router, state]);
+  const exchanged   = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
+  // ── Step 1: If we have a ?code=, exchange it client-side ─────────────────
+  // This MUST use the browser client because it has the PKCE code_verifier
+  // stored in localStorage from when signInWithOAuth() was called.
+  useEffect(() => {
+    if (!code || exchanged.current) return;
+    exchanged.current = true;
+
+    const supabase = createClient();
+    supabase.auth.exchangeCodeForSession(code)
+      .then(({ error }) => {
+        if (error) {
+          console.error("[verifying] exchangeCodeForSession:", error.message);
+          setErrorMsg("Sign-in failed. Please try again.");
+          setState("error");
+        }
+        // On success: onAuthStateChange fires SIGNED_IN → useSessionHydration
+        // updates the store → the useEffect below detects isAuthenticated=true
+      })
+      .catch((err) => {
+        console.error("[verifying] exchange error:", err);
+        setErrorMsg("Sign-in failed. Please try again.");
+        setState("error");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [code]);
+
+  // ── Step 2: Handle #access_token hash (implicit flow fallback) ───────────
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (!hash || code) return;
+    const hp           = new URLSearchParams(hash.slice(1));
+    const accessToken  = hp.get("access_token");
+    const refreshToken = hp.get("refresh_token");
+    if (accessToken && refreshToken) {
+      const supabase = createClient();
+      supabase.auth.setSession({ access_token: accessToken, refresh_token: refreshToken })
+        .catch(() => { setErrorMsg("Could not establish session."); setState("error"); });
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Step 3: Cycle status messages ────────────────────────────────────────
+  useEffect(() => {
+    if (state !== "verifying") return;
+    const t = setInterval(() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1)), 950);
+    return () => clearInterval(t);
+  }, [state]);
+
+  // ── Step 4: Watch auth store — redirect when session confirmed ───────────
+  useEffect(() => {
+    if (redirected.current || state === "error") return;
+    if (isHydrating) return; // still checking — wait
+
+    if (isAuthenticated) {
+      redirected.current = true;
+      setState("success");
+      setTimeout(() => router.replace(redirectPath), 700);
+    } else if (!code) {
+      // No code to exchange AND hydration is done AND not authenticated
+      // Something went wrong server-side
+      setErrorMsg("Session could not be established. Please sign in again.");
+      setState("error");
+    }
+    // If code exists: wait for exchange to complete (exchanged ref handles it)
+  }, [isHydrating, isAuthenticated, redirectPath, router, state, code]);
+
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+    <div
+      className="min-h-screen flex flex-col items-center justify-center px-4"
       style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}
     >
-      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+      <motion.div
+        initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
         className="flex flex-col items-center gap-8 w-full max-w-sm text-center"
       >
         <AppLogo width={52} height={52} />
 
+        {/* Icon */}
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {state === "success" && (
@@ -119,13 +154,15 @@ function VerifyingContent() {
           </AnimatePresence>
         </div>
 
+        {/* Messages */}
         <AnimatePresence mode="wait">
           {state === "verifying" && (
-            <motion.div key="verifying" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }} className="space-y-3"
             >
               <AnimatePresence mode="wait">
-                <motion.p key={stepIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+                <motion.p key={stepIndex}
+                  initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.3 }}
                   className="text-soft-white font-semibold text-base"
                 >
@@ -144,23 +181,24 @@ function VerifyingContent() {
             </motion.div>
           )}
           {state === "success" && (
-            <motion.div key="success" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
+            <motion.div key="s" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
               <p className="text-soft-white font-semibold text-base">You&apos;re in!</p>
               <p className="text-muted-lavender text-sm">Redirecting you now…</p>
             </motion.div>
           )}
           {state === "error" && (
-            <motion.div key="error" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div key="e" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-4 w-full"
             >
               <div>
                 <p className="text-soft-white font-semibold text-base mb-1">Sign-in failed</p>
                 <p className="text-muted-lavender text-sm leading-relaxed max-w-xs mx-auto">
-                  {errorMsg || "Please request a new sign-in code and try again."}
+                  {errorMsg || "Please try signing in again."}
                 </p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-xs mx-auto">
-                <button onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
+                <button
+                  onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
                   className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-semibold text-sm hover:bg-lilac/90 transition-colors"
                 >
                   <Mail className="w-4 h-4" /> Try signing in again
