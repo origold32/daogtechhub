@@ -1,10 +1,15 @@
 // supabase/client.ts
-// Browser-side Supabase client (for client components)
+// Browser-side Supabase client — singleton so session/cookies are shared
+// across all components. Creating multiple instances loses the session.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
 
+let _instance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+
 export const createClient = () => {
+  if (_instance) return _instance;
+
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -14,5 +19,6 @@ export const createClient = () => {
     );
   }
 
-  return createBrowserClient<Database>(url, key);
+  _instance = createBrowserClient<Database>(url, key);
+  return _instance;
 };

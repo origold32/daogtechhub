@@ -8,7 +8,6 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
-import { useScrollNav } from "@/hooks/useScrollNav";
 import AppLogo from "@/components/reusables/app-logo";
 import { useAuthStore } from "@/store/authStore";
 import { useSignOut } from "@/hooks/useSignOut";
@@ -19,6 +18,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useScrollNav } from "@/hooks/useScrollNav";
 
 interface NavLink {
   label: string;
@@ -34,7 +34,7 @@ export function Navigation({ links }: NavigationProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, isAuthenticated } = useAuthStore();
   const { handleSignOut, loading: signingOut } = useSignOut();
-  const navVisible = useScrollNav();
+  const navVisible = useScrollNav({ threshold: 60, hysteresis: 8 });
 
   const scrollTo = (ref: RefObject<HTMLElement | null>) => {
     setMobileOpen(false);
@@ -51,158 +51,135 @@ export function Navigation({ links }: NavigationProps) {
 
   return (
     <>
-      <nav className={`fixed top-9 left-0 right-0 z-[100] px-6 lg:px-12 py-5 flex items-center justify-between bg-gradient-to-b from-[#1A0B2E]/80 to-transparent backdrop-blur-sm transition-transform duration-300 ease-in-out ${navVisible ? "translate-y-0" : "-translate-y-full"}`}>
+      {/* ── Desktop / Mobile nav bar ── */}
+      <nav
+        className="fixed left-0 right-0 z-[100] px-6 lg:px-12 py-4 flex items-center justify-between"
+        style={{
+          top: 36, // sits below the 36px announcement banner
+          background: "rgba(26,11,46,0.85)",
+          backdropFilter: "blur(16px)",
+          WebkitBackdropFilter: "blur(16px)",
+          borderBottom: "1px solid rgba(212,165,255,0.08)",
+          transform: navVisible ? "translateY(0)" : "translateY(calc(-100% - 36px))",
+          transition: "transform 0.3s cubic-bezier(0.4,0,0.2,1)",
+          willChange: "transform",
+        }}
+      >
         {/* Logo */}
-        <AppLogo width={50} height={50} />
+        <div
+          className="flex items-center gap-2 cursor-pointer"
+          onClick={() => router.push("/")}
+        >
+          <AppLogo width={44} height={44} />
+        </div>
 
-        {/* Desktop Links */}
-        <div className="hidden lg:flex items-center gap-8">
+        {/* Desktop links */}
+        <div className="hidden lg:flex items-center gap-7">
           {links.map((link) => (
-            <button key={link.label} onClick={() => scrollTo(link.ref)} className="nav-link">
+            <button
+              key={link.label}
+              onClick={() => scrollTo(link.ref)}
+              className="text-sm font-medium text-muted-lavender hover:text-soft-white transition-colors relative group"
+            >
               {link.label}
+              <span className="absolute -bottom-0.5 left-0 w-0 h-px bg-lilac group-hover:w-full transition-all duration-200" />
             </button>
           ))}
         </div>
 
-        {/* Right section */}
+        {/* Right side */}
         <div className="flex items-center gap-3">
+          {isAuthenticated && user ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <div className="flex items-center gap-2 px-2 py-1 rounded-2xl border border-white/10 cursor-pointer hover:border-lilac/30 transition-colors">
+                  <SmartAvatar
+                    data={user}
+                    getKey={(u) => u.id}
+                    getName={(u) => `${u.firstName} ${u.lastName}`}
+                    getInitialsName={(u) => `${u.firstName} ${u.lastName}`}
+                    responsiveName
+                    avatarSizeClassName="w-7 h-7"
+                    fallbackTextClassName="text-xs"
+                  />
+                  <ChevronDown className="shrink-0" size={12} />
+                </div>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end" className="glass-card-small z-[200] min-w-[180px]">
+                {dropdownItems.map((item) => (
+                  <DropdownMenuItem
+                    key={item.label}
+                    onClick={() => router.push(item.href)}
+                    className="text-lilac cursor-pointer flex items-center gap-3 data-[highlighted]:bg-lilac/20"
+                  >
+                    <item.icon size={14} />
+                    <p className="text-sm">{item.label}</p>
+                  </DropdownMenuItem>
+                ))}
+                <div className="h-px bg-white/10 my-1" />
+                <DropdownMenuItem
+                  onClick={handleSignOut}
+                  disabled={signingOut}
+                  className="text-red-400 cursor-pointer flex items-center gap-3 data-[highlighted]:bg-red-400/10"
+                >
+                  {signingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
+                  <p className="text-sm">Sign out</p>
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : (
+            <Button
+              onClick={() => router.push("/auth")}
+              size="sm"
+              className="bg-lilac text-deep-purple hover:bg-lilac/90 rounded-xl text-xs px-4 hidden sm:flex"
+            >
+              Sign In
+            </Button>
+          )}
+
           {/* Mobile menu toggle */}
           <button
-            className="lg:hidden text-lilac p-2"
+            className="lg:hidden p-2 text-muted-lavender hover:text-lilac transition-colors rounded-xl hover:bg-white/5"
             onClick={() => setMobileOpen((o) => !o)}
-            aria-label={mobileOpen ? "Close menu" : "Open menu"}
+            aria-label="Toggle menu"
           >
-            <Menu size={24} />
+            {mobileOpen ? <X size={20} /> : <Menu size={20} />}
           </button>
-
-          {/* Desktop auth */}
-          <div className="hidden md:flex items-center gap-2">
-            {isAuthenticated && user ? (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <div className="flex items-center gap-2 p-1 rounded-full border border-white/20 cursor-pointer hover:border-lilac/50 transition-colors">
-                    <SmartAvatar
-                      data={user}
-                      getKey={(u) => u.id}
-                      getName={(u) => `${u.firstName} ${u.lastName}`}
-                      getInitialsName={(u) => `${u.firstName} ${u.lastName}`}
-                      showName
-                      avatarSizeClassName="w-7 h-7"
-                      fallbackTextClassName="text-xs"
-                    />
-                    <ChevronDown className="shrink-0 mx-2" size={14} />
-                  </div>
-                </DropdownMenuTrigger>
-
-                <DropdownMenuContent align="end" className="glass-card-small z-[200] min-w-[180px]">
-                  {dropdownItems.map((item) => (
-                    <DropdownMenuItem
-                      key={item.label}
-                      onClick={() => router.push(item.href)}
-                      className="text-lilac cursor-pointer flex items-center gap-3 data-[highlighted]:bg-lilac/20"
-                    >
-                      <item.icon size={14} />
-                      <p className="text-sm">{item.label}</p>
-                    </DropdownMenuItem>
-                  ))}
-                  <div className="h-px bg-white/10 my-1" />
-                  <DropdownMenuItem
-                    onClick={handleSignOut}
-                    disabled={signingOut}
-                    className="text-red-400 cursor-pointer flex items-center gap-3 data-[highlighted]:bg-red-400/10"
-                  >
-                    {signingOut ? <Loader2 size={14} className="animate-spin" /> : <LogOut size={14} />}
-                    <p className="text-sm">Sign out</p>
-                  </DropdownMenuItem>
-                </DropdownMenuContent>
-              </DropdownMenu>
-            ) : (
-              <div className="flex items-center gap-2">
-                <Button
-                  onClick={() => router.push("/auth?mode=signin&redirectTo=/profile")}
-                  variant="outline"
-                  size="sm"
-                  className="border-lilac/50 text-lilac hover:bg-lilac hover:text-deep-purple"
-                >
-                  Sign In
-                </Button>
-                <Button
-                  onClick={() => router.push("/auth?mode=signup&redirectTo=/profile")}
-                  size="sm"
-                  className="bg-lilac text-deep-purple hover:bg-lilac/90"
-                >
-                  Sign Up
-                </Button>
-              </div>
-            )}
-          </div>
         </div>
       </nav>
 
-      {/* Mobile menu */}
+      {/* ── Mobile dropdown ── */}
       <AnimatePresence>
         {mobileOpen && (
           <motion.div
-            key="mobile-menu"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+            initial={{ opacity: 0, y: -8 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -8 }}
             transition={{ duration: 0.2 }}
-            className="fixed inset-0 z-[110] bg-[#1A0B2E]/97 backdrop-blur-xl lg:hidden flex flex-col items-center justify-center gap-6"
+            className="fixed left-0 right-0 z-[99] px-4 py-4 flex flex-col gap-2"
+            style={{
+              top: 36 + 64, // banner + nav height
+              background: "rgba(26,11,46,0.97)",
+              backdropFilter: "blur(20px)",
+              borderBottom: "1px solid rgba(212,165,255,0.08)",
+            }}
           >
-            <button
-              className="absolute top-6 right-6 text-lilac p-2"
-              aria-label="Close menu"
-              onClick={() => setMobileOpen(false)}
-            >
-              <X size={24} />
-            </button>
-
-            {links.map((link, i) => (
-              <motion.button
+            {links.map((link) => (
+              <button
                 key={link.label}
-                initial={{ y: 20, opacity: 0 }}
-                animate={{ y: 0, opacity: 1 }}
-                transition={{ delay: i * 0.06, duration: 0.3 }}
                 onClick={() => scrollTo(link.ref)}
-                className="text-2xl font-heading font-bold text-soft-white hover:text-lilac transition-colors"
+                className="w-full text-left px-3 py-3 text-sm font-medium text-muted-lavender hover:text-soft-white hover:bg-white/5 rounded-xl transition-colors"
               >
                 {link.label}
-              </motion.button>
+              </button>
             ))}
-
-            <div className="h-px w-32 bg-white/10" />
-
-            {isAuthenticated && user ? (
-              <div className="flex flex-col items-center gap-3">
-                <Button onClick={() => { setMobileOpen(false); router.push("/profile"); }}
-                  className="bg-lilac text-deep-purple hover:bg-lilac/90 w-40">
-                  My Profile
-                </Button>
-                <Button
-                  onClick={() => { setMobileOpen(false); handleSignOut(); }}
-                  variant="outline"
-                  disabled={signingOut}
-                  className="border-red-400/50 text-red-400 hover:bg-red-400/10 w-40"
-                >
-                  {signingOut ? <Loader2 size={14} className="animate-spin mr-2" /> : null}
-                  Sign Out
-                </Button>
-              </div>
-            ) : (
-              <div className="flex flex-col items-center gap-3">
-                <Button
-                  onClick={() => { setMobileOpen(false); router.push("/auth?mode=signin&redirectTo=/profile"); }}
-                  variant="outline"
-                  className="border-lilac/50 text-lilac hover:bg-lilac hover:text-deep-purple w-40"
-                >
-                  Sign In
-                </Button>
-                <Button
-                  onClick={() => { setMobileOpen(false); router.push("/auth?mode=signup&redirectTo=/profile"); }}
-                  className="bg-lilac text-deep-purple hover:bg-lilac/90 w-40"
-                >
-                  Sign Up
-                </Button>
-              </div>
+            {!isAuthenticated && (
+              <Button
+                onClick={() => { setMobileOpen(false); router.push("/auth"); }}
+                className="w-full mt-1 bg-lilac text-deep-purple hover:bg-lilac/90 rounded-xl"
+              >
+                Sign In
+              </Button>
             )}
           </motion.div>
         )}

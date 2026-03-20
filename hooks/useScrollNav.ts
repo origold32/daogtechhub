@@ -1,48 +1,50 @@
 // hooks/useScrollNav.ts
-// Returns whether the navbar should be visible based on scroll direction.
-// - Visible on mount and when scrolling UP
-// - Hidden when scrolling DOWN (past threshold)
-// - Always visible when at the top
+// Smooth auto-hide navbar on scroll down, reveal on scroll up.
+// Works correctly with a fixed announcement banner above the nav.
 "use client";
 
 import { useState, useEffect, useRef } from "react";
 
 interface Options {
-  threshold?: number;   // px scrolled before hide kicks in (default 80)
-  hysteresis?: number;  // minimum px change to trigger state flip (default 6)
+  /** Minimum px scrolled from top before hide kicks in (default: 60) */
+  threshold?: number;
+  /** Minimum px of scroll delta before triggering show/hide (reduces jitter) */
+  hysteresis?: number;
 }
 
-export function useScrollNav({ threshold = 80, hysteresis = 6 }: Options = {}) {
-  const [visible, setVisible] = useState(true);
-  const lastY    = useRef(0);
-  const ticking  = useRef(false);
+export function useScrollNav({ threshold = 60, hysteresis = 8 }: Options = {}) {
+  const [visible,  setVisible]  = useState(true);
+  const lastScrollY = useRef(0);
+  const ticking     = useRef(false);
 
   useEffect(() => {
-    lastY.current = window.scrollY;
+    // Initialise to current scroll position
+    lastScrollY.current = window.scrollY;
 
-    const onScroll = () => {
+    function update() {
+      const current = window.scrollY;
+      const delta   = current - lastScrollY.current;
+
+      if (current <= threshold) {
+        // Always show at top of page
+        setVisible(true);
+      } else if (delta > hysteresis) {
+        // Scrolled down enough — hide
+        setVisible(false);
+      } else if (delta < -hysteresis) {
+        // Scrolled up enough — show
+        setVisible(true);
+      }
+
+      lastScrollY.current = current;
+      ticking.current     = false;
+    }
+
+    function onScroll() {
       if (ticking.current) return;
       ticking.current = true;
-
-      requestAnimationFrame(() => {
-        const y    = window.scrollY;
-        const diff = y - lastY.current;
-
-        if (y < threshold) {
-          // Always show at top
-          setVisible(true);
-        } else if (diff > hysteresis) {
-          // Scrolling down — hide
-          setVisible(false);
-        } else if (diff < -hysteresis) {
-          // Scrolling up — show
-          setVisible(true);
-        }
-
-        lastY.current   = y;
-        ticking.current = false;
-      });
-    };
+      requestAnimationFrame(update);
+    }
 
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
