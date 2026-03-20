@@ -1,8 +1,19 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles ALL auth completions:
-//   ?code=        → Google OAuth PKCE — calls /api/auth/exchange?code=
-//   ?token_hash=  → Email magic link  — calls /api/auth/exchange?token_hash=
-//   (nothing)     → OTP already verified or existing session — waits for store
+// Auth completion page for ALL flows: Google OAuth, Email magic link, OTP.
+//
+// How it works:
+// ┌─────────────────────────────────────────────────────────────┐
+// │ Google OAuth / Email magic link:                            │
+// │   Supabase redirects here with ?code= or ?token_hash=      │
+// │   @supabase/ssr's createBrowserClient detects these in URL  │
+// │   and exchanges them automatically → fires SIGNED_IN event  │
+// │                                                             │
+// │ Manual OTP:                                                 │
+// │   verifyOtp() already established the session.              │
+// │   INITIAL_SESSION fires with valid session → redirect.      │
+// └─────────────────────────────────────────────────────────────┘
+// We do NOT manually call exchangeCodeForSession or fetch().
+// We just initialize the client (which auto-exchanges) and wait for the event.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -10,7 +21,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
-import { useAuthStore } from "@/store/authStore";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 const STEPS = [
   "Verifying your identity…",
@@ -24,79 +35,75 @@ type UIState = "verifying" | "success" | "error";
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
+  const next   = params.get("next") ?? "/profile";
 
-  const next       = params.get("next") ?? "/profile";
-  const code       = params.get("code");
-  const tokenHash  = params.get("token_hash");
-  const type       = params.get("type") ?? "email";
-
-  const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const redirected  = useRef(false);
-  const exchanged   = useRef(false);
+  const done = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Call server-side exchange for code or token_hash ─────────────────────
   useEffect(() => {
-    const needsExchange = code || tokenHash;
-    if (!needsExchange || exchanged.current) return;
-    exchanged.current = true;
+    if (done.current) return;
+    done.current = true;
 
-    // Clean params from URL immediately (prevents re-use on refresh)
-    const clean = new URL(window.location.href);
-    clean.searchParams.delete("code");
-    clean.searchParams.delete("token_hash");
-    clean.searchParams.delete("type");
-    window.history.replaceState(null, "", clean.toString());
+    // Get the singleton client — this is the same instance that called
+    // signInWithOAuth or signInWithOtp, so it has the code_verifier in cookies.
+    // @supabase/ssr automatically detects ?code= or ?token_hash= in the URL
+    // and calls exchangeCodeForSession / verifyOtp internally.
+    const supabase = getSupabaseBrowserClient();
 
-    // Build exchange URL
-    const exchangeUrl = code
-      ? `/api/auth/exchange?code=${encodeURIComponent(code)}`
-      : `/api/auth/exchange?token_hash=${encodeURIComponent(tokenHash!)}&type=${encodeURIComponent(type)}`;
+    const go = (path: string) => {
+      setUiState("success");
+      setTimeout(() => router.replace(path), 600);
+    };
 
-    fetch(exchangeUrl, { credentials: "same-origin" })
-      .then(async (res) => {
-        if (!res.ok) {
-          const body = await res.json().catch(() => ({})) as { error?: string };
-          setErrorMsg(body.error ?? "Sign-in failed. Please try again.");
-          setUiState("error");
-        }
-        // Success: session cookies are set in response headers by the server.
-        // useSessionHydration in ClientProviders detects the session and
-        // calls login() → isAuthenticated becomes true → redirect fires below.
-      })
-      .catch(() => {
-        setErrorMsg("Network error. Please check your connection and try again.");
-        setUiState("error");
-      });
+    const fail = (msg: string) => {
+      setErrorMsg(msg);
+      setUiState("error");
+    };
+
+    // Subscribe FIRST — never miss the event
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
+      if (event === "SIGNED_IN" && session?.user) {
+        subscription.unsubscribe();
+        go(redirectPath);
+      } else if (event === "SIGNED_OUT") {
+        subscription.unsubscribe();
+        fail("Session could not be established. Please sign in again.");
+      }
+    });
+
+    // Also check existing session (for OTP flow where session is already set)
+    supabase.auth.getSession().then(({ data: { session }, error }) => {
+      if (error) {
+        subscription.unsubscribe();
+        fail("Sign-in failed. Please try again.");
+        return;
+      }
+      if (session?.user) {
+        subscription.unsubscribe();
+        go(redirectPath);
+      }
+      // else: wait for onAuthStateChange to fire (OAuth/magic link exchange in progress)
+    });
+
+    return () => subscription.unsubscribe();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Animate step messages ──────────────────────────────────────────────────
+  // Animate step messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // ── Redirect once auth store confirms session ─────────────────────────────
-  useEffect(() => {
-    if (redirected.current || uiState === "error") return;
-    if (isHydrating) return;
-    if (isAuthenticated) {
-      redirected.current = true;
-      setUiState("success");
-      setTimeout(() => router.replace(redirectPath), 600);
-    }
-  }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
-
-  // ── Safety timeout — 20s ──────────────────────────────────────────────────
+  // Safety timeout — 20s
   useEffect(() => {
     const t = setTimeout(() => {
-      if (!redirected.current && uiState === "verifying") {
+      if (uiState === "verifying") {
         setErrorMsg("Sign-in timed out. Please try again.");
         setUiState("error");
       }
@@ -188,16 +195,12 @@ function VerifyingContent() {
                 </p>
               </div>
               <div className="flex flex-col gap-2.5 w-full max-w-[260px] mx-auto">
-                <button
-                  onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
-                  className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-bold text-sm hover:bg-lilac/90 active:scale-[0.98] transition-all"
-                >
+                <button onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
+                  className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-bold text-sm hover:bg-lilac/90 active:scale-[0.98] transition-all">
                   <Mail className="w-4 h-4" /> Try signing in again
                 </button>
-                <button
-                  onClick={() => router.push("/")}
-                  className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors"
-                >
+                <button onClick={() => router.push("/")}
+                  className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors">
                   Back to home
                 </button>
               </div>
