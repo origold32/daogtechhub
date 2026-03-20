@@ -1,8 +1,6 @@
 // supabase/client.ts
-// Browser-side Supabase client — module-level singleton.
-// detectSessionInUrl is DISABLED to prevent the browser client from trying
-// to exchange OAuth codes that have already been handled server-side.
-// Session is read from cookies set by the server callback route.
+// Browser-side Supabase client — singleton.
+// Handles both PKCE (code) and implicit (hash) OAuth flows.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
@@ -21,9 +19,11 @@ export const createClient = () => {
     );
   }
 
+  // detectSessionInUrl: false — we handle the code/hash manually in /auth/verifying
+  // so the client doesn't auto-consume the code and interfere with our flow
   _instance = createBrowserClient<Database>(url, key, {
     auth: {
-      detectSessionInUrl: false, // Server callback handles code exchange
+      detectSessionInUrl: false,
       persistSession: true,
       autoRefreshToken: true,
     },

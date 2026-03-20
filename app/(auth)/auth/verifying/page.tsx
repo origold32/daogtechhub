@@ -1,7 +1,17 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles two entry points:
-//   A. ?code= present → forward to /auth/callback for server-side exchange
-//   B. No code → session already in cookies; wait for store hydration then redirect
+// Single client-side page that handles ALL OAuth callback scenarios:
+//
+//   PKCE flow:     URL has ?code=XXX
+//                  → call supabase.auth.exchangeCodeForSession(code)
+//                    The browser client has the code_verifier in its cookie storage
+//
+//   Implicit flow: URL has #access_token=XXX&refresh_token=YYY  
+//                  → call supabase.auth.setSession({ access_token, refresh_token })
+//
+//   OTP verified:  No code, no hash — session already in cookies from server
+//                  → just wait for onAuthStateChange to fire SIGNED_IN
+//
+// In all cases: watch auth store → redirect when isAuthenticated becomes true
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -10,6 +20,7 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
 import { useAuthStore } from "@/store/authStore";
+import { createClient } from "@/supabase/client";
 
 const STEPS = [
   "Verifying your identity…",
@@ -24,67 +35,93 @@ function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const next   = params.get("next") ?? "/profile";
-  const code   = params.get("code");
 
   const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
+  const handled     = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Case A: ?code= present → forward to server callback ──────────────────
-  // The server callback route correctly exchanges the code with the code_verifier
-  // from cookies, sets session cookies, and redirects back here without the code.
+  // ── Handle code/hash on mount ─────────────────────────────────────────────
   useEffect(() => {
-    if (!code) return;
-    // Build callback URL preserving the next param
-    const callbackUrl = new URL("/auth/callback", window.location.origin);
-    callbackUrl.searchParams.set("code", code);
-    callbackUrl.searchParams.set("next", redirectPath);
-    // Hard navigate so the server route handler runs
-    window.location.href = callbackUrl.toString();
+    if (handled.current) return;
+    handled.current = true;
+
+    const urlCode = params.get("code");
+    const hash    = window.location.hash;
+
+    async function handle() {
+      const supabase = createClient();
+
+      // ── PKCE: ?code= in URL ────────────────────────────────────────────────
+      if (urlCode) {
+        console.log("[verifying] PKCE flow, exchanging code...");
+        const { error } = await supabase.auth.exchangeCodeForSession(urlCode);
+        if (error) {
+          console.error("[verifying] PKCE exchange error:", error.message);
+          setErrorMsg(friendlyError(error.message));
+          setUiState("error");
+        }
+        // Clean the code from the URL so it can't be re-used
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete("code");
+        window.history.replaceState(null, "", clean.toString());
+        return;
+      }
+
+      // ── Implicit: #access_token in hash ────────────────────────────────────
+      if (hash && hash.includes("access_token")) {
+        console.log("[verifying] Implicit flow, setting session from hash...");
+        const hp           = new URLSearchParams(hash.slice(1));
+        const accessToken  = hp.get("access_token");
+        const refreshToken = hp.get("refresh_token");
+        const errorDesc    = hp.get("error_description");
+
+        if (errorDesc) {
+          setErrorMsg(friendlyError(decodeURIComponent(errorDesc)));
+          setUiState("error");
+          return;
+        }
+
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            console.error("[verifying] setSession error:", error.message);
+            setErrorMsg(friendlyError(error.message));
+            setUiState("error");
+          }
+          // Clean hash from URL
+          window.history.replaceState(null, "", window.location.pathname + window.location.search);
+        }
+        return;
+      }
+
+      // ── No code, no hash — session should already be in cookies (OTP flow) ─
+      console.log("[verifying] No code/hash — waiting for session from cookies...");
+    }
+
+    handle().catch((err) => {
+      console.error("[verifying] handle error:", err);
+      setErrorMsg("Sign-in failed. Please try again.");
+      setUiState("error");
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // If code is present, we're about to redirect — don't do anything else
-  if (code) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center px-4"
-        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}
-      >
-        <div className="flex flex-col items-center gap-6">
-          <AppLogo width={52} height={52} />
-          <div className="w-12 h-12 relative">
-            <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
-              <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(212,165,255,0.15)" strokeWidth="3" />
-              <motion.circle cx="24" cy="24" r="20" fill="none" stroke="#d4a5ff"
-                strokeWidth="3" strokeLinecap="round"
-                strokeDasharray={`${2 * Math.PI * 20}`}
-                animate={{ strokeDashoffset: [2 * Math.PI * 20, 0] }}
-                transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
-              />
-            </svg>
-          </div>
-          <p className="text-soft-white text-sm font-medium">Completing sign-in…</p>
-        </div>
-      </div>
-    );
-  }
-
-  // ── Case B: No code — session should be in cookies ────────────────────────
-
-  // Cycle status messages
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // ── Cycle status messages ─────────────────────────────────────────────────
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1)), 950);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // Watch auth store — redirect when session confirmed
-  // eslint-disable-next-line react-hooks/rules-of-hooks
+  // ── Watch auth store → redirect when authenticated ────────────────────────
   useEffect(() => {
     if (redirected.current || uiState === "error") return;
     if (isHydrating) return;
@@ -94,11 +131,24 @@ function VerifyingContent() {
       setUiState("success");
       setTimeout(() => router.replace(redirectPath), 700);
     } else {
-      // isHydrating cleared but not authenticated
-      setErrorMsg("Session could not be confirmed. Please sign in again.");
-      setUiState("error");
+      // Hydration done, not authenticated — something failed
+      // Don't show error immediately — the exchange might still be in flight
+      // The 5s safety timeout in useSessionHydration will eventually fire
+      // If we're still here after it, show the error
     }
   }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
+
+  // ── Final safety timeout — 12s max ───────────────────────────────────────
+  useEffect(() => {
+    const t = setTimeout(() => {
+      if (!redirected.current && uiState === "verifying") {
+        setErrorMsg("Sign-in timed out. Please try again.");
+        setUiState("error");
+      }
+    }, 12000);
+    return () => clearTimeout(t);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   return (
     <div
@@ -208,6 +258,15 @@ function VerifyingContent() {
       </motion.div>
     </div>
   );
+}
+
+function friendlyError(raw: string): string {
+  const m = raw.toLowerCase();
+  if (m.includes("expired"))                             return "The sign-in link has expired. Please try again.";
+  if (m.includes("already used"))                        return "This link was already used. Please request a new one.";
+  if (m.includes("pkce") || m.includes("code verifier")) return "Sign-in failed. Please try again (clear cookies if this persists).";
+  if (m.includes("access denied"))                       return "Access was denied. Please try again.";
+  return "Sign-in failed. Please try again.";
 }
 
 export default function VerifyingPage() {
