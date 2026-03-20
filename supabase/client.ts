@@ -1,11 +1,9 @@
 // supabase/client.ts
-// Re-exports the shared singleton from lib/supabaseClient.
-// All app code should import from here or from @/lib/supabaseClient directly.
+// All browser auth uses the shared singleton from lib/supabaseClient.
+// This file exists for backward compatibility with existing imports.
 
-export { supabase as default } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
-// Factory function for backward compatibility with existing imports
-export const createClient = () => {
-  const { supabase } = require("@/lib/supabaseClient");
-  return supabase;
-};
+export const createClient = () => supabase;
+export { supabase };
+export default supabase;

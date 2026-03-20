@@ -1,117 +1,73 @@
-// Lightweight fetch-based client that mirrors the minimal axios API surface used in the app.
-// - Attaches Supabase session JWT when available
-// - Retries once on 401 after refreshSession()
-// - Supports get/post/patch/put/delete helpers
-// - Returns { data, status, statusText, message } similar to AxiosResponse
+// axios/index.ts
+// Axios instance wired to Next.js API routes.
+// Supabase JWT is attached per-request via an interceptor.
 
-type RequestConfig = {
-  url: string;
-  method?: "GET" | "POST" | "PUT" | "PATCH" | "DELETE" | "get" | "post" | "put" | "patch" | "delete";
-  headers?: Record<string, string>;
-  data?: any;
-  signal?: AbortSignal | null;
-};
+import axios, { AxiosRequestConfig, AxiosError, AxiosResponse } from "axios";
 
-let _supabase: Awaited<ReturnType<typeof import("@/supabase/client").createClient>> | null = null;
+export const axiosBaseInstance = axios.create({
+  baseURL: "/api",
+  headers: { "Content-Type": "application/json" },
+});
+
+// ── Supabase client — uses the app-wide singleton ────────────────────────────
+import { supabase as _sharedSupabase } from "@/lib/supabaseClient";
 function getSupabaseClient() {
-  if (_supabase) return _supabase;
-  try {
-    const { createClient } = require("@/supabase/client");
-    _supabase = createClient();
-    return _supabase!;
-  } catch {
-    return null;
-  }
+  return typeof window !== "undefined" ? _sharedSupabase : null;
 }
 
-async function attachAuthHeaders(headers: Record<string, string> = {}) {
-  const supabase = getSupabaseClient();
-  if (!supabase) return headers;
-
-  try {
-    const { data: { session } } = await supabase.auth.getSession();
-    if (session?.access_token) {
-      return { ...headers, Authorization: `Bearer ${session.access_token}` };
-    }
-  } catch {
-    // ignore
-  }
-  return headers;
-}
-
-async function doFetch(config: RequestConfig, retry = true): Promise<any> {
-  const method = (config.method ?? "GET").toUpperCase() as "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-  const isFormData = typeof FormData !== "undefined" && config.data instanceof FormData;
-
-  const headers = await attachAuthHeaders(
-    isFormData ? { ...config.headers } : { "Content-Type": "application/json", ...config.headers }
-  );
-
-  const body =
-    method === "GET" || method === "DELETE"
-      ? undefined
-      : isFormData
-        ? config.data
-        : JSON.stringify(config.data ?? {});
-
-  const res = await fetch(config.url, {
-    method,
-    headers,
-    body,
-    signal: config.signal,
-  });
-
-  if (res.status === 401 && retry) {
+// ── Request: attach Supabase JWT ──────────────────────────────────────────────
+axiosBaseInstance.interceptors.request.use(
+  async (config: AxiosRequestConfig) => {
     const supabase = getSupabaseClient();
     if (supabase) {
-      const { error } = await supabase.auth.refreshSession();
-      if (!error) {
-        return doFetch(config, false);
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.access_token) {
+          config.headers = {
+            ...config.headers,
+            Authorization: `Bearer ${session.access_token}`,
+          };
+        }
+      } catch {
+        // Session unavailable — proceed without auth header
       }
     }
-  }
 
-  const text = await res.text();
-  let data: any;
-  try { data = text ? JSON.parse(text) : null; } catch { data = text; }
+    // Don't override Content-Type for FormData uploads
+    if (config.data instanceof FormData) {
+      delete config.headers?.["Content-Type"];
+    }
 
-  if (!res.ok) {
-    const error: any = new Error(data?.message ?? res.statusText);
-    error.response = { data, status: res.status, statusText: res.statusText };
-    throw error;
-  }
+    return config;
+  },
+  (error: AxiosError) => Promise.reject(error)
+);
 
-  return {
-    data,
-    status: res.status,
-    statusText: res.statusText,
-    message: (data && (data.message ?? data.msg)) || res.statusText,
-    headers: res.headers,
-  };
-}
+// ── Response: auto-retry on 401 after refreshing session ─────────────────────
+axiosBaseInstance.interceptors.response.use(
+  (response: AxiosResponse) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
 
-type AxiosLike = {
-  (config: RequestConfig): Promise<any>;
-  get: (url: string, headers?: Record<string, string>) => Promise<any>;
-  post: (url: string, data?: any, headers?: Record<string, string>) => Promise<any>;
-  put: (url: string, data?: any, headers?: Record<string, string>) => Promise<any>;
-  patch: (url: string, data?: any, headers?: Record<string, string>) => Promise<any>;
-  delete: (url: string, headers?: Record<string, string>) => Promise<any>;
-};
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
 
-export const axiosBaseInstance: AxiosLike = Object.assign(
-  (config: RequestConfig) => doFetch(config),
-  {
-    get: (url: string, headers?: Record<string, string>) =>
-      doFetch({ url, method: "GET", headers }),
-    post: (url: string, data?: any, headers?: Record<string, string>) =>
-      doFetch({ url, method: "POST", data, headers }),
-    put: (url: string, data?: any, headers?: Record<string, string>) =>
-      doFetch({ url, method: "PUT", data, headers }),
-    patch: (url: string, data?: any, headers?: Record<string, string>) =>
-      doFetch({ url, method: "PATCH", data, headers }),
-    delete: (url: string, headers?: Record<string, string>) =>
-      doFetch({ url, method: "DELETE", headers }),
+      const supabase = getSupabaseClient();
+      if (supabase) {
+        const { error: refreshError } = await supabase.auth.refreshSession();
+        if (!refreshError) {
+          return axiosBaseInstance(originalRequest);
+        }
+      }
+
+      // Refresh failed — redirect to sign-in
+      if (typeof window !== "undefined") {
+        const redirectTo = encodeURIComponent(window.location.pathname);
+        window.location.href = `/auth?redirectTo=${redirectTo}`;
+      }
+    }
+
+    return Promise.reject(error);
   }
 );
 
