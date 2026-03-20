@@ -2,7 +2,7 @@
 // Axios instance wired to Next.js API routes.
 // Supabase JWT is attached per-request via an interceptor.
 
-import axios, { AxiosRequestConfig, AxiosError, AxiosResponse } from "axios";
+import axios, { InternalAxiosRequestConfig, AxiosRequestConfig, AxiosError, AxiosResponse } from "axios";
 
 export const axiosBaseInstance = axios.create({
   baseURL: "/api",
@@ -17,7 +17,7 @@ function getSupabaseClient() {
 
 // ── Request: attach Supabase JWT ──────────────────────────────────────────────
 axiosBaseInstance.interceptors.request.use(
-  async (config: AxiosRequestConfig) => {
+  async (config: InternalAxiosRequestConfig) => {
     const supabase = getSupabaseClient();
     if (supabase) {
       try {
