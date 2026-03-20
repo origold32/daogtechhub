@@ -1,7 +1,13 @@
 // app/(auth)/auth/verifying/page.tsx
-// Session confirmation page — shown after /auth/callback completes the PKCE exchange.
-// Session is already in cookies when this page loads. We just confirm it and redirect.
-// No code exchange happens here. No auth logic. Just read session → redirect.
+// OAuth session confirmation page.
+//
+// When ?code= is present (PKCE flow from Google):
+//   → Calls /api/auth/exchange?code=XXX (server route)
+//   → Server exchanges code with code_verifier from cookies, sets session cookies
+//   → We wait for useSessionHydration to detect the session, then redirect
+//
+// When no code (OTP or returning session):
+//   → Session already in cookies, just wait for auth store confirmation
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -21,25 +27,60 @@ const STEPS = [
 type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
-  const router      = useRouter();
-  const params      = useSearchParams();
-  const next        = params.get("next") ?? "/profile";
-  const redirectPath = next.startsWith("/") ? next : "/profile";
+  const router = useRouter();
+  const params = useSearchParams();
+  const next   = params.get("next") ?? "/profile";
+  const code   = params.get("code");
 
   const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
+  const exchanged   = useRef(false);
 
-  // Animate steps
+  const redirectPath = next.startsWith("/") ? next : "/profile";
+
+  // ── Exchange PKCE code via server route ─────────────────────────────────
+  // If ?code= is in the URL, call the server-side exchange endpoint.
+  // The server reads the code_verifier cookie, exchanges with Supabase,
+  // and returns session cookies in the response headers.
+  useEffect(() => {
+    if (!code || exchanged.current) return;
+    exchanged.current = true;
+
+    // Strip code from URL immediately to prevent re-use on refresh
+    const clean = new URL(window.location.href);
+    clean.searchParams.delete("code");
+    window.history.replaceState(null, "", clean.toString());
+
+    fetch(`/api/auth/exchange?code=${encodeURIComponent(code)}`)
+      .then(async (res) => {
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          const msg  = (body as { error?: string }).error ?? "Exchange failed";
+          setErrorMsg("Sign-in failed: " + msg);
+          setUiState("error");
+        }
+        // On success: server set session cookies in response headers.
+        // The browser stores them. useSessionHydration will detect the session
+        // via getSession() → SIGNED_IN → auth store updates → redirect below.
+      })
+      .catch(() => {
+        setErrorMsg("Network error during sign-in. Please try again.");
+        setUiState("error");
+      });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Animate status messages ─────────────────────────────────────────────
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // Watch auth store — set by useSessionHydration when SIGNED_IN fires
+  // ── Watch auth store → redirect on session confirmed ────────────────────
   useEffect(() => {
     if (redirected.current || uiState === "error") return;
     if (isHydrating) return;
@@ -50,14 +91,14 @@ function VerifyingContent() {
     }
   }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
 
-  // Safety timeout — 15s
+  // ── Safety timeout — 20s ────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => {
       if (!redirected.current && uiState === "verifying") {
-        setErrorMsg("Session could not be confirmed. Please sign in again.");
+        setErrorMsg("Sign-in timed out. Please try again.");
         setUiState("error");
       }
-    }, 15000);
+    }, 20000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -145,12 +186,16 @@ function VerifyingContent() {
                 </p>
               </div>
               <div className="flex flex-col gap-2.5 w-full max-w-[260px] mx-auto">
-                <button onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
-                  className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-bold text-sm hover:bg-lilac/90 active:scale-[0.98] transition-all">
+                <button
+                  onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
+                  className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-bold text-sm hover:bg-lilac/90 active:scale-[0.98] transition-all"
+                >
                   <Mail className="w-4 h-4" /> Try signing in again
                 </button>
-                <button onClick={() => router.push("/")}
-                  className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors">
+                <button
+                  onClick={() => router.push("/")}
+                  className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors"
+                >
                   Back to home
                 </button>
               </div>

@@ -6,10 +6,9 @@ import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
-// ── Browser singleton client — only call in browser context ──────────────────
 function getClient() {
-  try   { return getSupabaseBrowserClient(); }
-  catch { return null; }
+  if (typeof window === "undefined") return null;
+  try { return getSupabaseBrowserClient(); } catch { return null; }
 }
 
 // ── Friendly error mapper ─────────────────────────────────────────────────────
@@ -344,13 +343,13 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // PKCE flow: Supabase sends ?code= to /auth/callback (server route).
-    // The server route exchanges the code using the code_verifier cookie,
-    // sets session cookies, and redirects to /auth/verifying.
+    // PKCE flow: Supabase sends ?code= to /auth/verifying.
+    // The verifying page calls /api/auth/exchange (server route) which completes
+    // the PKCE exchange server-side and sets session cookies.
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
+      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
     });
     setIsLoading(false);
     return error
