@@ -23,10 +23,7 @@ axiosBaseInstance.interceptors.request.use(
       try {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.access_token) {
-          config.headers = {
-            ...config.headers,
-            Authorization: `Bearer ${session.access_token}`,
-          };
+          config.headers.set("Authorization", `Bearer ${session.access_token}`);
         }
       } catch {
         // Session unavailable — proceed without auth header
