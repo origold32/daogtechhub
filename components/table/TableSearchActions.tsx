@@ -43,7 +43,7 @@ const TableSearchActions = ({
       : `?tab=${tabData}`;
     try {
       const resp = await axiosBaseInstance.get(`${exportUrl}${query}`);
-      toast.success(resp.message);
+      toast.success(resp.data?.message ?? "Export ready");
       downloadCSV(`${resp?.data}`, type);
       setLoading(false);
     } catch (error: any) {
