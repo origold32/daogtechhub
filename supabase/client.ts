@@ -1,9 +1,6 @@
 // supabase/client.ts
-// Browser-side Supabase client — module-level singleton.
-// detectSessionInUrl: true (default) allows @supabase/ssr to automatically
-// detect and exchange OAuth codes from the URL on page load.
-// The OAuth redirect must point to a CLIENT-SIDE page (not a server route handler)
-// so the browser client can read both the URL params and the stored code_verifier.
+// Browser-side Supabase client — singleton for general use.
+// The verifying page uses createBrowserClient directly for OAuth code exchange.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
@@ -23,8 +20,5 @@ export const createClient = () => {
   }
 
   _instance = createBrowserClient<Database>(url, key);
-  // Note: detectSessionInUrl defaults to true in createBrowserClient.
-  // This means on page load, if there's a ?code= or #access_token= in the URL,
-  // Supabase will automatically exchange/set the session and fire SIGNED_IN.
   return _instance;
 };
