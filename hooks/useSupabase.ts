@@ -6,11 +6,9 @@ import { createClient } from "@/supabase/client";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
-// ── Singleton browser client ──────────────────────────────────────────────────
-let _client: ReturnType<typeof createClient> | null = null;
+// ── Browser client — createClient() is already a singleton (see supabase/client.ts)
 function getClient() {
-  if (_client) return _client;
-  try   { _client = createClient(); return _client; }
+  try   { return createClient(); }
   catch { return null; }
 }
 
@@ -213,7 +211,7 @@ export function useSessionHydration() {
       if (useAuthStore.getState().isHydrating) {
         useAuthStore.getState().setHydrating(false);
       }
-    }, 800);
+    }, 5000);
 
     return () => {
       subscription.unsubscribe();
