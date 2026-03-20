@@ -344,14 +344,12 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
     const siteUrl  = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // Point redirectTo directly at /auth/verifying (a client-side page).
-    // This means Supabase appends ?code=XXX to the verifying page URL directly,
-    // and the client-side page exchanges it using the browser client which
-    // still has the PKCE code_verifier in localStorage. No server hop = no loss.
-    const nextParam = redirectPath && redirectPath !== "/" ? `&next=${encodeURIComponent(redirectPath)}` : "";
+    // Implicit flow: Supabase returns tokens in the URL hash (#access_token=...)
+    // directly to /auth/verifying — no PKCE code exchange needed.
+    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/verifying?oauth=1${nextParam}` },
+      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
     });
     setIsLoading(false);
     return error

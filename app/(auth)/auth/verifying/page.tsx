@@ -1,10 +1,12 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles OAuth PKCE completion and OTP session propagation.
-// 
-// For Google/OAuth: Supabase redirects here with ?code=XXX&oauth=1
-//   → Call exchangeCodeForSession client-side (browser has the PKCE verifier)
-// For OTP: Arrives after server-side verification
-//   → Wait for auth store to confirm session from SIGNED_IN event
+// Used after Google OAuth (implicit flow) and OTP verification.
+//
+// Implicit flow: Supabase puts tokens in URL hash: #access_token=X&refresh_token=Y
+//   → createBrowserClient with detectSessionInUrl:true picks these up automatically
+//   → fires SIGNED_IN → useSessionHydration updates store → we redirect
+//
+// OTP flow: session already established server-side or by verifyOtp()
+//   → just wait for auth store to confirm
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -25,11 +27,9 @@ const STEPS = [
 type State = "verifying" | "success" | "error";
 
 function VerifyingContent() {
-  const router  = useRouter();
-  const params  = useSearchParams();
-  const next    = params.get("next") ?? "/profile";
-  const code    = params.get("code");
-  const isOAuth = params.get("oauth") === "1";
+  const router = useRouter();
+  const params = useSearchParams();
+  const next   = params.get("next") ?? "/profile";
 
   const { isAuthenticated, isHydrating } = useAuthStore();
 
@@ -37,43 +37,25 @@ function VerifyingContent() {
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
-  const exchanged   = useRef(false);
+  const initialized = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Exchange OAuth code client-side ───────────────────────────────────────
-  // Only runs when ?code= is present (OAuth PKCE flow).
-  // The browser client retains the code_verifier from signInWithOAuth().
+  // ── Initialize Supabase client on mount ──────────────────────────────────
+  // createBrowserClient with detectSessionInUrl:true automatically detects
+  // #access_token in the URL hash and calls setSession() internally.
+  // This fires the SIGNED_IN event which useSessionHydration picks up.
   useEffect(() => {
-    if (!code || exchanged.current) return;
-    exchanged.current = true;
-
-    const supabase = createClient();
-    supabase.auth.exchangeCodeForSession(code)
-      .then(({ data, error }) => {
-        if (error) {
-          console.error("[verifying] exchangeCodeForSession error:", error.message);
-          // Try to give a helpful message
-          if (error.message.toLowerCase().includes("expired") || 
-              error.message.toLowerCase().includes("invalid")) {
-            setErrorMsg("The sign-in link has expired. Please try again.");
-          } else {
-            setErrorMsg("Sign-in failed: " + error.message);
-          }
-          setState("error");
-          return;
-        }
-        // Success — SIGNED_IN event will fire and update auth store
-        // The useEffect watching isAuthenticated below will handle redirect
-        console.log("[verifying] code exchanged successfully for user:", data.user?.email);
-      })
-      .catch((err) => {
-        console.error("[verifying] exchange exception:", err);
-        setErrorMsg("Sign-in failed. Please try again.");
-        setState("error");
-      });
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code]);
+    if (initialized.current) return;
+    initialized.current = true;
+    // Just calling createClient() is enough — it auto-detects the hash
+    // and fires onAuthStateChange with SIGNED_IN if tokens are present.
+    try {
+      createClient();
+    } catch (e) {
+      console.error("[verifying] client init error:", e);
+    }
+  }, []);
 
   // ── Cycle status messages ─────────────────────────────────────────────────
   useEffect(() => {
@@ -85,7 +67,7 @@ function VerifyingContent() {
   // ── Watch auth store → redirect when session confirmed ────────────────────
   useEffect(() => {
     if (redirected.current || state === "error") return;
-    if (isHydrating) return; // wait for session check to complete
+    if (isHydrating) return;
 
     if (isAuthenticated) {
       redirected.current = true;
@@ -94,14 +76,10 @@ function VerifyingContent() {
       return;
     }
 
-    // Hydration complete but NOT authenticated
-    if (!code) {
-      // No code to exchange — OTP flow session failed
-      setErrorMsg("Session could not be established. Please sign in again.");
-      setState("error");
-    }
-    // If code exists, we're still waiting for exchange to complete + SIGNED_IN to fire
-  }, [isHydrating, isAuthenticated, redirectPath, router, state, code]);
+    // Hydration done but not authenticated — show error
+    setErrorMsg("Sign-in could not be completed. Please try again.");
+    setState("error");
+  }, [isHydrating, isAuthenticated, redirectPath, router, state]);
 
   return (
     <div
@@ -115,29 +93,24 @@ function VerifyingContent() {
       >
         <AppLogo width={52} height={52} />
 
-        {/* Animated icon */}
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {state === "success" && (
-              <motion.div key="check"
-                initial={{ scale: 0 }} animate={{ scale: 1 }}
+              <motion.div key="check" initial={{ scale: 0 }} animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
               >
                 <CheckCircle2 className="w-20 h-20 text-lilac" strokeWidth={1.5} />
               </motion.div>
             )}
             {state === "error" && (
-              <motion.div key="x"
-                initial={{ scale: 0 }} animate={{ scale: 1 }}
+              <motion.div key="x" initial={{ scale: 0 }} animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
               >
                 <XCircle className="w-20 h-20 text-red-400" strokeWidth={1.5} />
               </motion.div>
             )}
             {state === "verifying" && (
-              <motion.div key="spinner"
-                initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
-              >
+              <motion.div key="spinner" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
                   <circle cx="40" cy="40" r="34" fill="none"
                     stroke="rgba(212,165,255,0.1)" strokeWidth="4" />
@@ -148,10 +121,8 @@ function VerifyingContent() {
                     transition={{ duration: 2.5, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
                   />
                 </svg>
-                <motion.div
-                  className="absolute inset-0 flex items-center justify-center"
-                  animate={{ scale: [1, 1.15, 1] }}
-                  transition={{ duration: 1.2, repeat: Infinity }}
+                <motion.div className="absolute inset-0 flex items-center justify-center"
+                  animate={{ scale: [1, 1.15, 1] }} transition={{ duration: 1.2, repeat: Infinity }}
                 >
                   <div className="w-3 h-3 rounded-full bg-lilac/70" />
                 </motion.div>
@@ -160,11 +131,9 @@ function VerifyingContent() {
           </AnimatePresence>
         </div>
 
-        {/* Text content */}
         <AnimatePresence mode="wait">
           {state === "verifying" && (
-            <motion.div key="v"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }} className="space-y-3"
             >
               <AnimatePresence mode="wait">
@@ -189,18 +158,14 @@ function VerifyingContent() {
           )}
 
           {state === "success" && (
-            <motion.div key="s"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-              className="space-y-1"
-            >
+            <motion.div key="s" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
               <p className="text-soft-white font-semibold text-base">You&apos;re in!</p>
               <p className="text-muted-lavender text-sm">Redirecting you now…</p>
             </motion.div>
           )}
 
           {state === "error" && (
-            <motion.div key="e"
-              initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+            <motion.div key="e" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-4 w-full"
             >
               <div>
@@ -216,8 +181,7 @@ function VerifyingContent() {
                 >
                   <Mail className="w-4 h-4" /> Try signing in again
                 </button>
-                <button
-                  onClick={() => router.push("/")}
+                <button onClick={() => router.push("/")}
                   className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors"
                 >
                   Back to home
