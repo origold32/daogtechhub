@@ -1,11 +1,14 @@
 // app/(auth)/auth/verifying/page.tsx
+// PKCE OAuth completion and OTP session confirmation.
+// CRITICAL: Uses the SAME shared supabase singleton that was used during signInWithOAuth.
+// This ensures the PKCE code_verifier (stored in cookies by @supabase/ssr) is accessible.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
-import { createClient } from "@supabase/supabase-js";
+import { supabase } from "@/lib/supabaseClient";
 import AppLogo from "@/components/reusables/app-logo";
 
 const STEPS = [
@@ -34,15 +37,7 @@ function VerifyingContent() {
     if (done.current) return;
     done.current = true;
 
-    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-    const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
-
-    // Fresh @supabase/supabase-js client — no SSR wrapper, no singleton
-    const supabase = createClient(supabaseUrl, supabaseKey, {
-      auth: { persistSession: true, autoRefreshToken: true },
-    });
-
-    // ── Listen for session FIRST — never miss the SIGNED_IN event ────────
+    // Subscribe to auth state FIRST — never miss the SIGNED_IN event
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
       (event, session) => {
         if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
@@ -53,10 +48,12 @@ function VerifyingContent() {
       }
     );
 
-    // ── Then do the exchange / session setup ──────────────────────────────
+    // Now perform the exchange / session setup
     (async () => {
       try {
-        // Case 1: PKCE code in URL
+        // ── PKCE: exchange code for session ──────────────────────────────
+        // Uses the SAME shared client that stored the code_verifier in cookies
+        // during signInWithOAuth. Cookie storage survives full-page navigation.
         if (code) {
           const { error } = await supabase.auth.exchangeCodeForSession(code);
           if (error) {
@@ -67,7 +64,7 @@ function VerifyingContent() {
           return;
         }
 
-        // Case 2: Implicit tokens in URL hash
+        // ── Implicit: tokens in URL hash ─────────────────────────────────
         const hash = window.location.hash;
         if (hash?.includes("access_token")) {
           const hp = new URLSearchParams(hash.slice(1));
@@ -85,14 +82,14 @@ function VerifyingContent() {
           return;
         }
 
-        // Case 3: OTP — check if already signed in
+        // ── OTP: check if session already exists ─────────────────────────
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           subscription.unsubscribe();
           setUiState("success");
           setTimeout(() => router.replace(redirectPath), 500);
         }
-        // else: wait for SIGNED_IN event from subscription above
+        // else: wait for onAuthStateChange to fire SIGNED_IN
 
       } catch (err) {
         subscription.unsubscribe();
@@ -105,14 +102,14 @@ function VerifyingContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Status message cycle
+  // Cycle status messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // Final safety timeout — 20s
+  // Safety timeout
   useEffect(() => {
     const t = setTimeout(() => {
       if (uiState === "verifying") {

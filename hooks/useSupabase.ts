@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { createClient } from "@/supabase/client";
+import { supabase as _supabase } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
-// ── Browser client — createClient() is already a singleton (see supabase/client.ts)
+// ── Shared singleton client ───────────────────────────────────────────────────
 function getClient() {
-  try   { return createClient(); }
+  try   { return _supabase; }
   catch { return null; }
 }
 

@@ -1,25 +1,11 @@
 // supabase/client.ts
-// Browser-side Supabase client — singleton using @supabase/ssr.
-// @supabase/ssr stores the PKCE code_verifier in COOKIES (not localStorage),
-// so it survives page navigations and is readable by both client and server.
+// Re-exports the shared singleton from lib/supabaseClient.
+// All app code should import from here or from @/lib/supabaseClient directly.
 
-import { createBrowserClient } from "@supabase/ssr";
-import type { Database } from "@/types/database";
+export { supabase as default } from "@/lib/supabaseClient";
 
-let _instance: ReturnType<typeof createBrowserClient<Database>> | null = null;
-
+// Factory function for backward compatibility with existing imports
 export const createClient = () => {
-  if (_instance) return _instance;
-
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-
-  if (!url || !key) {
-    throw new Error(
-      "Supabase is not configured. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your .env.local file."
-    );
-  }
-
-  _instance = createBrowserClient<Database>(url, key);
-  return _instance;
+  const { supabase } = require("@/lib/supabaseClient");
+  return supabase;
 };
