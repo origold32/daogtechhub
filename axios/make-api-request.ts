@@ -1,5 +1,6 @@
 // axios/make-api-request.ts
 import { axiosBaseInstance } from "@/axios";
+import type { AxiosRequestConfig } from "axios";
 
 const apiMethods = {
   GET: "get",
@@ -21,7 +22,7 @@ interface MakeApiRequest {
   type: apiMethod;
   url: string;
   data?: Partial<Record<string, any>>;
-  config?: Omit<RequestInit, "method"> & { headers?: Record<string, string> };
+  config?: AxiosRequestConfig;
 }
 
 export default async function makeApiRequest({
@@ -31,16 +32,17 @@ export default async function makeApiRequest({
   config = {},
 }: MakeApiRequest): Promise<any> {
   try {
-    const { headers, ...restConfig } = config;
-    const signal = restConfig.signal ?? undefined;
-
-    let resp = await axiosBaseInstance({
+    const reqConfig: AxiosRequestConfig = {
       url,
       method: type,
       ...(data instanceof FormData ? { data } : { data: { ...data } }),
-      headers,
-      ...(signal ? { signal } : {}),
-    });
+    };
+    // Merge config carefully to avoid AxiosHeaders type conflicts
+    if (config.signal)  reqConfig.signal  = config.signal;
+    if (config.params)  reqConfig.params  = config.params;
+    if (config.timeout) reqConfig.timeout = config.timeout;
+
+    let resp = await axiosBaseInstance(reqConfig);
 
     //
     return {
