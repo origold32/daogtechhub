@@ -8,6 +8,7 @@ import {
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import { useScrollNav } from "@/hooks/useScrollNav";
 import AppLogo from "@/components/reusables/app-logo";
 import { useAuthStore } from "@/store/authStore";
 import { useSignOut } from "@/hooks/useSignOut";
@@ -33,6 +34,7 @@ export function Navigation({ links }: NavigationProps) {
   const [mobileOpen, setMobileOpen] = useState(false);
   const { user, isAuthenticated } = useAuthStore();
   const { handleSignOut, loading: signingOut } = useSignOut();
+  const navVisible = useScrollNav();
 
   const scrollTo = (ref: RefObject<HTMLElement | null>) => {
     setMobileOpen(false);
@@ -49,7 +51,7 @@ export function Navigation({ links }: NavigationProps) {
 
   return (
     <>
-      <nav className="fixed top-9 left-0 right-0 z-[100] px-6 lg:px-12 py-5 flex items-center justify-between bg-gradient-to-b from-[#1A0B2E]/80 to-transparent backdrop-blur-sm">
+      <nav className={`fixed top-9 left-0 right-0 z-[100] px-6 lg:px-12 py-5 flex items-center justify-between bg-gradient-to-b from-[#1A0B2E]/80 to-transparent backdrop-blur-sm transition-transform duration-300 ease-in-out ${navVisible ? "translate-y-0" : "-translate-y-full"}`}>
         {/* Logo */}
         <AppLogo width={50} height={50} />
 

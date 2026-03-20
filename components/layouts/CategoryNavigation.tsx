@@ -20,6 +20,7 @@ import { useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import dynamic from "next/dynamic";
 import { useNotificationStore } from "@/store/notificationStore";
+import { useScrollNav } from "@/hooks/useScrollNav";
 
 const SmartSearch = dynamic(
   () => import("@/components/product/SmartSearch").then((m) => ({ default: m.SmartSearch })),
@@ -42,6 +43,7 @@ export function CategoryNavigation({ category }: CategoryNavigationProps) {
   const { unreadCount, setPanelOpen } = useNotificationStore();
   const { handleSignOut, loading: signingOut } = useSignOut();
   const [showSearch, setShowSearch] = useState(false);
+  const navVisible = useScrollNav();
 
   // Only link to pages that actually exist
   const dropdownItems = [
@@ -64,7 +66,7 @@ export function CategoryNavigation({ category }: CategoryNavigationProps) {
   return (
     <>
       <nav
-        className="fixed top-9 left-0 right-0 z-[100] px-4 lg:px-8 py-3 flex items-center justify-between border-b border-lilac/15"
+        className={`fixed top-9 left-0 right-0 z-[100] px-4 lg:px-8 py-3 flex items-center justify-between border-b border-lilac/15 transition-transform duration-300 ease-in-out ${navVisible ? "translate-y-0" : "-translate-y-full"}`}
         style={{ background: "rgba(26,11,46,0.95)", backdropFilter: "blur(20px)" }}
       >
         {/* Left */}
