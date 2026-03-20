@@ -1,15 +1,14 @@
 // supabase/server.ts
-// Server-side Supabase clients for Route Handlers, Server Components, Server Actions.
+// Server-side Supabase clients for API Route Handlers only.
+// Auth is implicit/client-side — sessions are in localStorage, not cookies.
+// API routes receive the JWT via Authorization header from axios interceptor.
 
-import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
-import { cookies } from "next/headers";
 import type { Database } from "@/types/database";
 
-// ── Anon client (respects RLS) ────────────────────────────────────────────────
+// ── Anon client — used by API routes that need to verify the user's JWT ───────
+// The JWT is passed via the Authorization: Bearer <token> header from the client.
 export const createServerSupabaseClient = async () => {
-  const cookieStore = await cookies();
-
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
@@ -19,26 +18,12 @@ export const createServerSupabaseClient = async () => {
     );
   }
 
-  return createServerClient<Database>(url, key, {
-    cookies: {
-      getAll()             { return cookieStore.getAll(); },
-      setAll(cookiesToSet) {
-        try {
-          cookiesToSet.forEach(({ name, value, options }) =>
-            cookieStore.set(name, value, options)
-          );
-        } catch {
-          // In Server Components cookies are read-only — this is expected.
-        }
-      },
-    },
+  return createSupabaseClient<Database>(url, key, {
+    auth: { autoRefreshToken: false, persistSession: false },
   });
 };
 
-// ── Service-role client (bypasses RLS — server-only, never expose to client) ──
-// BUG FIX #4: old code used require("@supabase/supabase-js") which is CommonJS
-// in an ESM module — works in Next.js but is incorrect and can break in strict
-// ESM environments or edge runtime. Now uses the top-level ESM import.
+// ── Service-role client — bypasses RLS, for trusted server operations ─────────
 export const createServiceRoleClient = () => {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.SUPABASE_SERVICE_ROLE_KEY;

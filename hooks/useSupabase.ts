@@ -211,7 +211,7 @@ export function useSessionHydration() {
       if (useAuthStore.getState().isHydrating) {
         useAuthStore.getState().setHydrating(false);
       }
-    }, 5000);
+    }, 3000);
 
     return () => {
       subscription.unsubscribe();
@@ -343,14 +343,16 @@ export function useSupabaseAuth() {
     const supabase = getClient();
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
-    const siteUrl  = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // Redirect to /auth/verifying — a client-side page that handles both:
-    //   PKCE:     ?code=XXX  → browser client calls exchangeCodeForSession
-    //   Implicit: #access_token=XXX → browser client calls setSession
-    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
+    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    // Implicit flow: Supabase returns #access_token=...&refresh_token=... in the hash
+    // to the redirectTo URL. The verifying page reads the hash and calls setSession().
+    // No code_verifier, no PKCE, no server exchange needed.
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
+      options: {
+        redirectTo: `${siteUrl}/auth/verifying`,
+        skipBrowserRedirect: false,
+      },
     });
     setIsLoading(false);
     return error

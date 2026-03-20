@@ -1,11 +1,14 @@
 // supabase/client.ts
-// Browser-side Supabase client — singleton for general use.
-// The verifying page uses createBrowserClient directly for OAuth code exchange.
+// Pure browser client using @supabase/supabase-js with flowType:"implicit".
+// This completely bypasses PKCE — no code_verifier, no code_challenge.
+// OAuth tokens arrive in the URL hash (#access_token=...) and are set via setSession().
+// Using @supabase/supabase-js directly (not @supabase/ssr) to avoid SSR wrapper
+// forcing PKCE regardless of flowType setting.
 
-import { createBrowserClient } from "@supabase/ssr";
+import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
-let _instance: ReturnType<typeof createBrowserClient<Database>> | null = null;
+let _instance: ReturnType<typeof createSupabaseClient<Database>> | null = null;
 
 export const createClient = () => {
   if (_instance) return _instance;
@@ -19,6 +22,14 @@ export const createClient = () => {
     );
   }
 
-  _instance = createBrowserClient<Database>(url, key);
+  _instance = createSupabaseClient<Database>(url, key, {
+    auth: {
+      flowType: "implicit",        // No PKCE — tokens come in URL hash
+      detectSessionInUrl: true,    // Auto-detect #access_token on page load
+      persistSession: true,        // Keep session in localStorage
+      autoRefreshToken: true,      // Auto-refresh before expiry
+      storageKey: "daog-auth",     // Explicit storage key
+    },
+  });
   return _instance;
 };

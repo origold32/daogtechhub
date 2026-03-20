@@ -16,25 +16,18 @@ import { WhatsAppFloat } from "./components/WhatsAppFloat";
 import FooterSection from "./components/FooterSection";
 import { JsonLd, organizationSchema, websiteSchema } from "@/components/seo/JsonLd";
 
-// Intercepts ?code= / ?token_hash= params that Supabase sometimes sends to the
-// site root instead of /auth/callback (happens when emailRedirectTo isn't set).
+// Handles any stray auth params that land on the home page
 function AuthCodeRedirect() {
   const router       = useRouter();
   const searchParams = useSearchParams();
 
   useEffect(() => {
-    const code      = searchParams.get("code");
-    const tokenHash = searchParams.get("token_hash");
-    const error     = searchParams.get("error");
-
-    if (code || tokenHash) {
-      // Forward ALL params so the callback handler has everything it needs
-      const dest = new URLSearchParams();
-      searchParams.forEach((v, k) => dest.set(k, v));
-      router.replace(`/auth/callback?${dest.toString()}`);
-    } else if (error) {
+    const error = searchParams.get("error");
+    if (error) {
       router.replace(`/auth?error=${encodeURIComponent(error)}`);
     }
+    // ?code= is no longer used (implicit flow sends #access_token in hash)
+    // token_hash OTP links go directly to /auth/verifying via emailRedirectTo
   }, [searchParams, router]);
 
   return null;
