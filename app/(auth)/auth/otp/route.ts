@@ -63,12 +63,17 @@ export async function POST(req: NextRequest) {
 
     let result;
     if (type === "email") {
-      // No emailRedirectTo — sends a pure 6-digit code only, no magic link.
-      // User types the code in the app. Works in every email client and browser.
+      // emailRedirectTo enables BOTH:
+      //   1. A 6-digit OTP code the user can enter manually
+      //   2. A magic link button in the email that signs them in directly
+      // Both go through /auth/verifying which handles token_hash (magic link) and
+      // manual OTP entry (via verifyOtp on the auth page).
+      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://daogtechhub.vercel.app";
       result = await supabase.auth.signInWithOtp({
         email: identifier.trim().toLowerCase(),
         options: {
           shouldCreateUser: true,
+          emailRedirectTo: `${siteUrl}/auth/verifying`,
           data: { source: "email_otp", ...userMetadata },
         },
       });

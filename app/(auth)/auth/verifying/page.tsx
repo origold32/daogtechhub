@@ -1,13 +1,8 @@
 // app/(auth)/auth/verifying/page.tsx
-// OAuth session confirmation page.
-//
-// When ?code= is present (PKCE flow from Google):
-//   → Calls /api/auth/exchange?code=XXX (server route)
-//   → Server exchanges code with code_verifier from cookies, sets session cookies
-//   → We wait for useSessionHydration to detect the session, then redirect
-//
-// When no code (OTP or returning session):
-//   → Session already in cookies, just wait for auth store confirmation
+// Handles ALL auth completions:
+//   ?code=        → Google OAuth PKCE — calls /api/auth/exchange?code=
+//   ?token_hash=  → Email magic link  — calls /api/auth/exchange?token_hash=
+//   (nothing)     → OTP already verified or existing session — waits for store
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -29,8 +24,11 @@ type UIState = "verifying" | "success" | "error";
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const next   = params.get("next") ?? "/profile";
-  const code   = params.get("code");
+
+  const next       = params.get("next") ?? "/profile";
+  const code       = params.get("code");
+  const tokenHash  = params.get("token_hash");
+  const type       = params.get("type") ?? "email";
 
   const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
@@ -41,46 +39,50 @@ function VerifyingContent() {
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Exchange PKCE code via server route ─────────────────────────────────
-  // If ?code= is in the URL, call the server-side exchange endpoint.
-  // The server reads the code_verifier cookie, exchanges with Supabase,
-  // and returns session cookies in the response headers.
+  // ── Call server-side exchange for code or token_hash ─────────────────────
   useEffect(() => {
-    if (!code || exchanged.current) return;
+    const needsExchange = code || tokenHash;
+    if (!needsExchange || exchanged.current) return;
     exchanged.current = true;
 
-    // Strip code from URL immediately to prevent re-use on refresh
+    // Clean params from URL immediately (prevents re-use on refresh)
     const clean = new URL(window.location.href);
     clean.searchParams.delete("code");
+    clean.searchParams.delete("token_hash");
+    clean.searchParams.delete("type");
     window.history.replaceState(null, "", clean.toString());
 
-    fetch(`/api/auth/exchange?code=${encodeURIComponent(code)}`)
+    // Build exchange URL
+    const exchangeUrl = code
+      ? `/api/auth/exchange?code=${encodeURIComponent(code)}`
+      : `/api/auth/exchange?token_hash=${encodeURIComponent(tokenHash!)}&type=${encodeURIComponent(type)}`;
+
+    fetch(exchangeUrl, { credentials: "same-origin" })
       .then(async (res) => {
         if (!res.ok) {
-          const body = await res.json().catch(() => ({}));
-          const msg  = (body as { error?: string }).error ?? "Exchange failed";
-          setErrorMsg("Sign-in failed: " + msg);
+          const body = await res.json().catch(() => ({})) as { error?: string };
+          setErrorMsg(body.error ?? "Sign-in failed. Please try again.");
           setUiState("error");
         }
-        // On success: server set session cookies in response headers.
-        // The browser stores them. useSessionHydration will detect the session
-        // via getSession() → SIGNED_IN → auth store updates → redirect below.
+        // Success: session cookies are set in response headers by the server.
+        // useSessionHydration in ClientProviders detects the session and
+        // calls login() → isAuthenticated becomes true → redirect fires below.
       })
       .catch(() => {
-        setErrorMsg("Network error during sign-in. Please try again.");
+        setErrorMsg("Network error. Please check your connection and try again.");
         setUiState("error");
       });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Animate status messages ─────────────────────────────────────────────
+  // ── Animate step messages ──────────────────────────────────────────────────
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // ── Watch auth store → redirect on session confirmed ────────────────────
+  // ── Redirect once auth store confirms session ─────────────────────────────
   useEffect(() => {
     if (redirected.current || uiState === "error") return;
     if (isHydrating) return;
@@ -91,7 +93,7 @@ function VerifyingContent() {
     }
   }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
 
-  // ── Safety timeout — 20s ────────────────────────────────────────────────
+  // ── Safety timeout — 20s ──────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => {
       if (!redirected.current && uiState === "verifying") {
