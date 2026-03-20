@@ -1,25 +1,26 @@
 // app/(auth)/auth/verifying/page.tsx
-// Pure client-side OAuth completion page.
+// Production-grade PKCE OAuth completion + OTP session confirmation.
 //
-// Implicit flow (normal):
-//   Supabase redirects here with #access_token=X&refresh_token=Y in URL hash.
-//   We call supabase.auth.setSession() → SIGNED_IN fires → auth store updates → redirect.
+// PKCE flow (Google/Facebook OAuth):
+//   Google → Supabase → /auth/verifying?code=XXX
+//   We call exchangeCodeForSession(code) with a FRESH createBrowserClient.
+//   The fresh client reads the code_verifier from cookies (set before OAuth redirect).
+//   Exchange succeeds → SIGNED_IN fires → auth store updates → redirect to profile.
 //
 // OTP flow:
-//   User enters 6-digit code → verifyOtp() sets session → SIGNED_IN fires → redirect.
-//   This page is also shown after OTP verification completes.
+//   Server verifies OTP → session in cookies → SIGNED_IN fires → redirect.
 //
-// PKCE detected (?code= present):
-//   Show clear error — user needs to re-initiate sign-in (Supabase will use implicit now).
+// Implicit fallback (#access_token):
+//   Calls setSession() directly → SIGNED_IN fires → redirect.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
-import { CheckCircle2, XCircle, Mail, AlertTriangle } from "lucide-react";
+import { CheckCircle2, XCircle, Mail } from "lucide-react";
+import { createBrowserClient } from "@supabase/ssr";
 import AppLogo from "@/components/reusables/app-logo";
 import { useAuthStore } from "@/store/authStore";
-import { createClient } from "@/supabase/client";
 
 const STEPS = [
   "Verifying your identity…",
@@ -34,7 +35,7 @@ function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const next   = params.get("next") ?? "/profile";
-  const code   = params.get("code"); // should NOT be here with implicit flow
+  const code   = params.get("code");
 
   const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
@@ -45,89 +46,114 @@ function VerifyingContent() {
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Process auth tokens on mount ────────────────────────────────────────
+  // ── Process auth on mount ─────────────────────────────────────────────────
   useEffect(() => {
     if (processed.current) return;
     processed.current = true;
 
-    // If ?code= is in the URL, PKCE is still active in Supabase dashboard
-    // Direct the user to re-try — the new client will use implicit flow
-    if (code) {
-      setErrorMsg(
-        "Configuration mismatch detected. Please click 'Try again' to sign in — " +
-        "the issue will resolve automatically."
-      );
-      setUiState("error");
-      return;
-    }
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-    // Read #access_token from URL hash (implicit flow)
-    const hash = window.location.hash;
-    if (!hash || !hash.includes("access_token")) return;
+    // Always create a FRESH client for auth exchange.
+    // This ensures it reads the current cookie state (including code_verifier)
+    // rather than relying on any cached singleton state.
+    const supabase = createBrowserClient(url, key);
 
-    const hp           = new URLSearchParams(hash.slice(1));
-    const accessToken  = hp.get("access_token");
-    const refreshToken = hp.get("refresh_token");
-    const hashError    = hp.get("error_description");
+    async function processAuth() {
+      // ── Case 1: PKCE OAuth — ?code= in URL ─────────────────────────────
+      // The code_verifier was stored in cookies by the SAME createBrowserClient
+      // type when signInWithOAuth was called. The fresh instance here reads
+      // those same cookies and can complete the PKCE exchange.
+      if (code) {
+        const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-    // Clear hash immediately to avoid re-processing
-    window.history.replaceState(null, "", window.location.pathname + window.location.search);
-
-    if (hashError) {
-      setErrorMsg(decodeURIComponent(hashError).replace(/\+/g, " "));
-      setUiState("error");
-      return;
-    }
-
-    if (!accessToken || !refreshToken) {
-      setErrorMsg("No session tokens received. Please try signing in again.");
-      setUiState("error");
-      return;
-    }
-
-    const supabase = createClient();
-    supabase.auth
-      .setSession({ access_token: accessToken, refresh_token: refreshToken })
-      .then(({ error }) => {
         if (error) {
-          setErrorMsg("Could not establish session. Please try again.");
+          console.error("[verifying] PKCE exchange failed:", error.message);
+          setErrorMsg("Sign-in failed. Please try again.");
           setUiState("error");
+          return;
         }
-        // On success: SIGNED_IN fires → useSessionHydration → auth store updates
-      })
-      .catch(() => {
-        setErrorMsg("Failed to establish session. Please try again.");
-        setUiState("error");
-      });
+
+        // Exchange succeeded — session is now set.
+        // onAuthStateChange(SIGNED_IN) will fire and update the auth store.
+        // The useEffect below watches isAuthenticated and will redirect.
+        console.log("[verifying] PKCE exchange successful for:", data.user?.email);
+
+        // Clean the code from the URL
+        const clean = new URL(window.location.href);
+        clean.searchParams.delete("code");
+        window.history.replaceState(null, "", clean.toString());
+        return;
+      }
+
+      // ── Case 2: Implicit flow — #access_token in URL hash ──────────────
+      const hash = window.location.hash;
+      if (hash && hash.includes("access_token")) {
+        const hp           = new URLSearchParams(hash.slice(1));
+        const accessToken  = hp.get("access_token");
+        const refreshToken = hp.get("refresh_token");
+        const hashError    = hp.get("error_description");
+
+        window.history.replaceState(null, "", window.location.pathname + window.location.search);
+
+        if (hashError) {
+          setErrorMsg(decodeURIComponent(hashError).replace(/\+/g, " "));
+          setUiState("error");
+          return;
+        }
+
+        if (accessToken && refreshToken) {
+          const { error } = await supabase.auth.setSession({
+            access_token: accessToken,
+            refresh_token: refreshToken,
+          });
+          if (error) {
+            setErrorMsg("Could not establish session. Please try again.");
+            setUiState("error");
+          }
+        }
+        return;
+      }
+
+      // ── Case 3: OTP verified server-side — session already in cookies ───
+      // No action needed. useSessionHydration will detect the session via
+      // getSession() → INITIAL_SESSION/SIGNED_IN → auth store updates → redirect.
+    }
+
+    processAuth().catch((err) => {
+      console.error("[verifying] unexpected error:", err);
+      setErrorMsg("Sign-in failed. Please try again.");
+      setUiState("error");
+    });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // ── Cycle status messages ────────────────────────────────────────────────
+  // ── Cycle status messages ─────────────────────────────────────────────────
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 950);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // ── Watch auth store → redirect when authenticated ───────────────────────
+  // ── Redirect once auth store confirms session ─────────────────────────────
   useEffect(() => {
     if (redirected.current || uiState === "error") return;
     if (isHydrating) return;
     if (isAuthenticated) {
       redirected.current = true;
       setUiState("success");
-      setTimeout(() => router.replace(redirectPath), 600);
+      setTimeout(() => router.replace(redirectPath), 650);
     }
   }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
 
-  // ── Safety timeout — 12s max ─────────────────────────────────────────────
+  // ── Safety timeout ────────────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => {
       if (!redirected.current && uiState === "verifying") {
         setErrorMsg("Sign-in timed out. Please try again.");
         setUiState("error");
       }
-    }, 12000);
+    }, 15000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -144,7 +170,7 @@ function VerifyingContent() {
       >
         <AppLogo width={52} height={52} />
 
-        {/* Animated state icon */}
+        {/* Animated icon */}
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {uiState === "success" && (
@@ -189,7 +215,7 @@ function VerifyingContent() {
           </AnimatePresence>
         </div>
 
-        {/* Status text */}
+        {/* Text content */}
         <AnimatePresence mode="wait">
           {uiState === "verifying" && (
             <motion.div key="v"
@@ -232,9 +258,9 @@ function VerifyingContent() {
               initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-5 w-full"
             >
-              <div className="flex flex-col items-center gap-2">
-                <p className="text-soft-white font-semibold text-base">Sign-in failed</p>
-                <p className="text-muted-lavender text-sm leading-relaxed max-w-[260px]">
+              <div>
+                <p className="text-soft-white font-semibold text-base mb-1">Sign-in failed</p>
+                <p className="text-muted-lavender text-sm leading-relaxed max-w-[260px] mx-auto">
                   {errorMsg || "Please try signing in again."}
                 </p>
               </div>
