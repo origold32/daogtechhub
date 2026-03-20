@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase as _supabase } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
-// ── Shared singleton client ───────────────────────────────────────────────────
+// ── Browser singleton client — only call in browser context ──────────────────
 function getClient() {
-  try   { return _supabase; }
+  try   { return getSupabaseBrowserClient(); }
   catch { return null; }
 }
 
@@ -344,15 +344,13 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // Implicit flow: Supabase returns #access_token=...&refresh_token=... in the hash
-    // to the redirectTo URL. The verifying page reads the hash and calls setSession().
-    // No code_verifier, no PKCE, no server exchange needed.
+    // PKCE flow: Supabase sends ?code= to /auth/callback (server route).
+    // The server route exchanges the code using the code_verifier cookie,
+    // sets session cookies, and redirects to /auth/verifying.
+    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: {
-        redirectTo: `${siteUrl}/auth/verifying`,
-        skipBrowserRedirect: false,
-      },
+      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
     });
     setIsLoading(false);
     return error

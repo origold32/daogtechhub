@@ -1,15 +1,15 @@
 // app/(auth)/auth/verifying/page.tsx
-// PKCE OAuth completion and OTP session confirmation.
-// CRITICAL: Uses the SAME shared supabase singleton that was used during signInWithOAuth.
-// This ensures the PKCE code_verifier (stored in cookies by @supabase/ssr) is accessible.
+// Session confirmation page — shown after /auth/callback completes the PKCE exchange.
+// Session is already in cookies when this page loads. We just confirm it and redirect.
+// No code exchange happens here. No auth logic. Just read session → redirect.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
-import { supabase } from "@/lib/supabaseClient";
 import AppLogo from "@/components/reusables/app-logo";
+import { useAuthStore } from "@/store/authStore";
 
 const STEPS = [
   "Verifying your identity…",
@@ -21,102 +21,43 @@ const STEPS = [
 type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const next   = params.get("next") ?? "/profile";
-  const code   = params.get("code");
+  const router      = useRouter();
+  const params      = useSearchParams();
+  const next        = params.get("next") ?? "/profile";
+  const redirectPath = next.startsWith("/") ? next : "/profile";
 
+  const { isAuthenticated, isHydrating } = useAuthStore();
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const done = useRef(false);
+  const redirected  = useRef(false);
 
-  const redirectPath = next.startsWith("/") ? next : "/profile";
-
-  useEffect(() => {
-    if (done.current) return;
-    done.current = true;
-
-    // Subscribe to auth state FIRST — never miss the SIGNED_IN event
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        if ((event === "SIGNED_IN" || event === "TOKEN_REFRESHED") && session?.user) {
-          subscription.unsubscribe();
-          setUiState("success");
-          setTimeout(() => router.replace(redirectPath), 500);
-        }
-      }
-    );
-
-    // Now perform the exchange / session setup
-    (async () => {
-      try {
-        // ── PKCE: exchange code for session ──────────────────────────────
-        // Uses the SAME shared client that stored the code_verifier in cookies
-        // during signInWithOAuth. Cookie storage survives full-page navigation.
-        if (code) {
-          const { error } = await supabase.auth.exchangeCodeForSession(code);
-          if (error) {
-            subscription.unsubscribe();
-            setErrorMsg("Sign-in failed: " + error.message);
-            setUiState("error");
-          }
-          return;
-        }
-
-        // ── Implicit: tokens in URL hash ─────────────────────────────────
-        const hash = window.location.hash;
-        if (hash?.includes("access_token")) {
-          const hp = new URLSearchParams(hash.slice(1));
-          const at = hp.get("access_token");
-          const rt = hp.get("refresh_token");
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-          if (at && rt) {
-            const { error } = await supabase.auth.setSession({ access_token: at, refresh_token: rt });
-            if (error) {
-              subscription.unsubscribe();
-              setErrorMsg("Session failed. Please try again.");
-              setUiState("error");
-            }
-          }
-          return;
-        }
-
-        // ── OTP: check if session already exists ─────────────────────────
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session?.user) {
-          subscription.unsubscribe();
-          setUiState("success");
-          setTimeout(() => router.replace(redirectPath), 500);
-        }
-        // else: wait for onAuthStateChange to fire SIGNED_IN
-
-      } catch (err) {
-        subscription.unsubscribe();
-        setErrorMsg("Unexpected error. Please try again.");
-        setUiState("error");
-      }
-    })();
-
-    return () => subscription.unsubscribe();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  // Cycle status messages
+  // Animate steps
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // Safety timeout
+  // Watch auth store — set by useSessionHydration when SIGNED_IN fires
+  useEffect(() => {
+    if (redirected.current || uiState === "error") return;
+    if (isHydrating) return;
+    if (isAuthenticated) {
+      redirected.current = true;
+      setUiState("success");
+      setTimeout(() => router.replace(redirectPath), 600);
+    }
+  }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
+
+  // Safety timeout — 15s
   useEffect(() => {
     const t = setTimeout(() => {
-      if (uiState === "verifying") {
-        setErrorMsg("Sign-in timed out. Please try again.");
+      if (!redirected.current && uiState === "verifying") {
+        setErrorMsg("Session could not be confirmed. Please sign in again.");
         setUiState("error");
       }
-    }, 20000);
+    }, 15000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
