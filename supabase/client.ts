@@ -1,7 +1,8 @@
 // supabase/client.ts
 // Browser-side Supabase client — module-level singleton.
-// Uses the default PKCE flow. The code_verifier is stored in cookies
-// by @supabase/ssr so it is available server-side in the callback route.
+// detectSessionInUrl is DISABLED to prevent the browser client from trying
+// to exchange OAuth codes that have already been handled server-side.
+// Session is read from cookies set by the server callback route.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
@@ -20,6 +21,12 @@ export const createClient = () => {
     );
   }
 
-  _instance = createBrowserClient<Database>(url, key);
+  _instance = createBrowserClient<Database>(url, key, {
+    auth: {
+      detectSessionInUrl: false, // Server callback handles code exchange
+      persistSession: true,
+      autoRefreshToken: true,
+    },
+  });
   return _instance;
 };

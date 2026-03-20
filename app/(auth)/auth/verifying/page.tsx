@@ -1,7 +1,7 @@
 // app/(auth)/auth/verifying/page.tsx
-// Shown after successful auth callback (OAuth or OTP).
-// Session cookies are already set by the server callback route.
-// This page just waits for the client-side auth store to hydrate, then redirects.
+// Handles two entry points:
+//   A. ?code= present → forward to /auth/callback for server-side exchange
+//   B. No code → session already in cookies; wait for store hydration then redirect
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -18,49 +18,87 @@ const STEPS = [
   "Almost there…",
 ];
 
-type State = "verifying" | "success" | "error";
+type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const next   = params.get("next") ?? "/profile";
+  const code   = params.get("code");
 
   const { isAuthenticated, isHydrating } = useAuthStore();
-  const [state,     setState]     = useState<State>("verifying");
+  const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
-  const attempts    = useRef(0);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // Cycle status messages
+  // ── Case A: ?code= present → forward to server callback ──────────────────
+  // The server callback route correctly exchanges the code with the code_verifier
+  // from cookies, sets session cookies, and redirects back here without the code.
   useEffect(() => {
-    if (state !== "verifying") return;
+    if (!code) return;
+    // Build callback URL preserving the next param
+    const callbackUrl = new URL("/auth/callback", window.location.origin);
+    callbackUrl.searchParams.set("code", code);
+    callbackUrl.searchParams.set("next", redirectPath);
+    // Hard navigate so the server route handler runs
+    window.location.href = callbackUrl.toString();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // If code is present, we're about to redirect — don't do anything else
+  if (code) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center px-4"
+        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}
+      >
+        <div className="flex flex-col items-center gap-6">
+          <AppLogo width={52} height={52} />
+          <div className="w-12 h-12 relative">
+            <svg className="w-12 h-12 -rotate-90" viewBox="0 0 48 48">
+              <circle cx="24" cy="24" r="20" fill="none" stroke="rgba(212,165,255,0.15)" strokeWidth="3" />
+              <motion.circle cx="24" cy="24" r="20" fill="none" stroke="#d4a5ff"
+                strokeWidth="3" strokeLinecap="round"
+                strokeDasharray={`${2 * Math.PI * 20}`}
+                animate={{ strokeDashoffset: [2 * Math.PI * 20, 0] }}
+                transition={{ duration: 1.5, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
+              />
+            </svg>
+          </div>
+          <p className="text-soft-white text-sm font-medium">Completing sign-in…</p>
+        </div>
+      </div>
+    );
+  }
+
+  // ── Case B: No code — session should be in cookies ────────────────────────
+
+  // Cycle status messages
+  // eslint-disable-next-line react-hooks/rules-of-hooks
+  useEffect(() => {
+    if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1)), 950);
     return () => clearInterval(t);
-  }, [state]);
+  }, [uiState]);
 
-  // Watch auth store — when session hydrates, redirect
+  // Watch auth store — redirect when session confirmed
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   useEffect(() => {
-    if (redirected.current || state === "error") return;
+    if (redirected.current || uiState === "error") return;
     if (isHydrating) return;
 
     if (isAuthenticated) {
       redirected.current = true;
-      setState("success");
+      setUiState("success");
       setTimeout(() => router.replace(redirectPath), 700);
-      return;
+    } else {
+      // isHydrating cleared but not authenticated
+      setErrorMsg("Session could not be confirmed. Please sign in again.");
+      setUiState("error");
     }
-
-    // Not authenticated yet — could still be propagating
-    // Retry a few times before giving up
-    attempts.current += 1;
-    if (attempts.current >= 3) {
-      setErrorMsg("Session could not be confirmed. Please try signing in again.");
-      setState("error");
-    }
-  }, [isHydrating, isAuthenticated, redirectPath, router, state]);
+  }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
 
   return (
     <div
@@ -76,22 +114,22 @@ function VerifyingContent() {
 
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
-            {state === "success" && (
+            {uiState === "success" && (
               <motion.div key="check" initial={{ scale: 0 }} animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
               >
                 <CheckCircle2 className="w-20 h-20 text-lilac" strokeWidth={1.5} />
               </motion.div>
             )}
-            {state === "error" && (
+            {uiState === "error" && (
               <motion.div key="x" initial={{ scale: 0 }} animate={{ scale: 1 }}
                 transition={{ type: "spring", stiffness: 260, damping: 20 }}
               >
                 <XCircle className="w-20 h-20 text-red-400" strokeWidth={1.5} />
               </motion.div>
             )}
-            {state === "verifying" && (
-              <motion.div key="spinner" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            {uiState === "verifying" && (
+              <motion.div key="spin" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
                   <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(212,165,255,0.1)" strokeWidth="4" />
                   <motion.circle cx="40" cy="40" r="34" fill="none" stroke="#d4a5ff"
@@ -112,7 +150,7 @@ function VerifyingContent() {
         </div>
 
         <AnimatePresence mode="wait">
-          {state === "verifying" && (
+          {uiState === "verifying" && (
             <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0, y: -6 }} className="space-y-3"
             >
@@ -136,13 +174,13 @@ function VerifyingContent() {
               </div>
             </motion.div>
           )}
-          {state === "success" && (
+          {uiState === "success" && (
             <motion.div key="s" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
               <p className="text-soft-white font-semibold text-base">You&apos;re in!</p>
               <p className="text-muted-lavender text-sm">Redirecting you now…</p>
             </motion.div>
           )}
-          {state === "error" && (
+          {uiState === "error" && (
             <motion.div key="e" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-4 w-full"
             >

@@ -155,9 +155,9 @@ export function useSessionHydration() {
           // Dedup: skip if this user's profile fetch is already in flight
           if (fetchingUserId.current === uid) return;
 
-          // Dedup: skip if the store already has this user and hydration is done
+          // Dedup: skip if this user is fully loaded (authenticated + not hydrating)
           const stored = useAuthStore.getState();
-          if (!stored.isHydrating && stored.user?.id === uid) return;
+          if (!stored.isHydrating && stored.isAuthenticated && stored.user?.id === uid) return;
 
           fetchingUserId.current = uid;
           await fetchAndStoreProfile(
