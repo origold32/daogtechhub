@@ -1,17 +1,16 @@
 // app/(auth)/auth/verifying/page.tsx
-// Single client-side page that handles ALL OAuth callback scenarios:
+// OAuth + OTP session confirmation page.
 //
-//   PKCE flow:     URL has ?code=XXX
-//                  → call supabase.auth.exchangeCodeForSession(code)
-//                    The browser client has the code_verifier in its cookie storage
+// How it works:
+// 1. signInWithOAuth redirects here with ?code= (PKCE) or #access_token= (implicit)
+// 2. createClient() initializes the Supabase browser client
+// 3. createBrowserClient automatically detects the code/hash and exchanges/sets the session
+// 4. This fires the SIGNED_IN event → useSessionHydration (in ClientProviders) calls
+//    fetchAndStoreProfile → login() → isAuthenticated becomes true
+// 5. This page watches isAuthenticated and redirects when it's true
 //
-//   Implicit flow: URL has #access_token=XXX&refresh_token=YYY  
-//                  → call supabase.auth.setSession({ access_token, refresh_token })
-//
-//   OTP verified:  No code, no hash — session already in cookies from server
-//                  → just wait for onAuthStateChange to fire SIGNED_IN
-//
-// In all cases: watch auth store → redirect when isAuthenticated becomes true
+// For OTP flow: session is already in cookies from server-side verification.
+// The INITIAL_SESSION event fires → same path → redirect.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -41,76 +40,24 @@ function VerifyingContent() {
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
-  const handled     = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Handle code/hash on mount ─────────────────────────────────────────────
+  // ── Initialize Supabase client on mount ───────────────────────────────────
+  // This is the critical step: createBrowserClient with detectSessionInUrl:true
+  // (the default) will automatically detect ?code= or #access_token= in the URL
+  // and call exchangeCodeForSession / setSession internally.
+  // It then fires onAuthStateChange(SIGNED_IN) which useSessionHydration handles.
   useEffect(() => {
-    if (handled.current) return;
-    handled.current = true;
-
-    const urlCode = params.get("code");
-    const hash    = window.location.hash;
-
-    async function handle() {
-      const supabase = createClient();
-
-      // ── PKCE: ?code= in URL ────────────────────────────────────────────────
-      if (urlCode) {
-        console.log("[verifying] PKCE flow, exchanging code...");
-        const { error } = await supabase.auth.exchangeCodeForSession(urlCode);
-        if (error) {
-          console.error("[verifying] PKCE exchange error:", error.message);
-          setErrorMsg(friendlyError(error.message));
-          setUiState("error");
-        }
-        // Clean the code from the URL so it can't be re-used
-        const clean = new URL(window.location.href);
-        clean.searchParams.delete("code");
-        window.history.replaceState(null, "", clean.toString());
-        return;
-      }
-
-      // ── Implicit: #access_token in hash ────────────────────────────────────
-      if (hash && hash.includes("access_token")) {
-        console.log("[verifying] Implicit flow, setting session from hash...");
-        const hp           = new URLSearchParams(hash.slice(1));
-        const accessToken  = hp.get("access_token");
-        const refreshToken = hp.get("refresh_token");
-        const errorDesc    = hp.get("error_description");
-
-        if (errorDesc) {
-          setErrorMsg(friendlyError(decodeURIComponent(errorDesc)));
-          setUiState("error");
-          return;
-        }
-
-        if (accessToken && refreshToken) {
-          const { error } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken,
-          });
-          if (error) {
-            console.error("[verifying] setSession error:", error.message);
-            setErrorMsg(friendlyError(error.message));
-            setUiState("error");
-          }
-          // Clean hash from URL
-          window.history.replaceState(null, "", window.location.pathname + window.location.search);
-        }
-        return;
-      }
-
-      // ── No code, no hash — session should already be in cookies (OTP flow) ─
-      console.log("[verifying] No code/hash — waiting for session from cookies...");
-    }
-
-    handle().catch((err) => {
-      console.error("[verifying] handle error:", err);
-      setErrorMsg("Sign-in failed. Please try again.");
+    // Just initializing the client is enough — it auto-detects and processes
+    // the OAuth callback URL. The SIGNED_IN event will update the auth store.
+    try {
+      createClient();
+    } catch (e) {
+      console.error("[verifying] Failed to init Supabase client:", e);
+      setErrorMsg("Auth configuration error. Please contact support.");
       setUiState("error");
-    });
+    }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -124,28 +71,26 @@ function VerifyingContent() {
   // ── Watch auth store → redirect when authenticated ────────────────────────
   useEffect(() => {
     if (redirected.current || uiState === "error") return;
-    if (isHydrating) return;
+    if (isHydrating) return; // Still checking session
 
     if (isAuthenticated) {
       redirected.current = true;
       setUiState("success");
       setTimeout(() => router.replace(redirectPath), 700);
-    } else {
-      // Hydration done, not authenticated — something failed
-      // Don't show error immediately — the exchange might still be in flight
-      // The 5s safety timeout in useSessionHydration will eventually fire
-      // If we're still here after it, show the error
     }
+    // Note: if isHydrating=false and isAuthenticated=false, the 12s timeout below
+    // will eventually show an error. We don't fail immediately because the
+    // code exchange might still be in progress.
   }, [isHydrating, isAuthenticated, redirectPath, router, uiState]);
 
-  // ── Final safety timeout — 12s max ───────────────────────────────────────
+  // ── Safety timeout ────────────────────────────────────────────────────────
   useEffect(() => {
     const t = setTimeout(() => {
       if (!redirected.current && uiState === "verifying") {
         setErrorMsg("Sign-in timed out. Please try again.");
         setUiState("error");
       }
-    }, 12000);
+    }, 15000);
     return () => clearTimeout(t);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -241,12 +186,14 @@ function VerifyingContent() {
                 </p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-xs mx-auto">
-                <button onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
+                <button
+                  onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
                   className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-semibold text-sm hover:bg-lilac/90 transition-colors"
                 >
                   <Mail className="w-4 h-4" /> Try signing in again
                 </button>
-                <button onClick={() => router.push("/")}
+                <button
+                  onClick={() => router.push("/")}
                   className="h-10 rounded-xl border border-white/10 text-muted-lavender text-sm hover:border-lilac/30 hover:text-lilac transition-colors"
                 >
                   Back to home
@@ -258,15 +205,6 @@ function VerifyingContent() {
       </motion.div>
     </div>
   );
-}
-
-function friendlyError(raw: string): string {
-  const m = raw.toLowerCase();
-  if (m.includes("expired"))                             return "The sign-in link has expired. Please try again.";
-  if (m.includes("already used"))                        return "This link was already used. Please request a new one.";
-  if (m.includes("pkce") || m.includes("code verifier")) return "Sign-in failed. Please try again (clear cookies if this persists).";
-  if (m.includes("access denied"))                       return "Access was denied. Please try again.";
-  return "Sign-in failed. Please try again.";
 }
 
 export default function VerifyingPage() {
