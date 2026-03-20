@@ -1,12 +1,7 @@
 // app/(auth)/auth/verifying/page.tsx
-// Used after Google OAuth (implicit flow) and OTP verification.
-//
-// Implicit flow: Supabase puts tokens in URL hash: #access_token=X&refresh_token=Y
-//   → createBrowserClient with detectSessionInUrl:true picks these up automatically
-//   → fires SIGNED_IN → useSessionHydration updates store → we redirect
-//
-// OTP flow: session already established server-side or by verifyOtp()
-//   → just wait for auth store to confirm
+// Shown after successful auth callback (OAuth or OTP).
+// Session cookies are already set by the server callback route.
+// This page just waits for the client-side auth store to hydrate, then redirects.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -15,7 +10,6 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
 import { useAuthStore } from "@/store/authStore";
-import { createClient } from "@/supabase/client";
 
 const STEPS = [
   "Verifying your identity…",
@@ -32,39 +26,22 @@ function VerifyingContent() {
   const next   = params.get("next") ?? "/profile";
 
   const { isAuthenticated, isHydrating } = useAuthStore();
-
   const [state,     setState]     = useState<State>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const redirected  = useRef(false);
-  const initialized = useRef(false);
+  const attempts    = useRef(0);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
-  // ── Initialize Supabase client on mount ──────────────────────────────────
-  // createBrowserClient with detectSessionInUrl:true automatically detects
-  // #access_token in the URL hash and calls setSession() internally.
-  // This fires the SIGNED_IN event which useSessionHydration picks up.
-  useEffect(() => {
-    if (initialized.current) return;
-    initialized.current = true;
-    // Just calling createClient() is enough — it auto-detects the hash
-    // and fires onAuthStateChange with SIGNED_IN if tokens are present.
-    try {
-      createClient();
-    } catch (e) {
-      console.error("[verifying] client init error:", e);
-    }
-  }, []);
-
-  // ── Cycle status messages ─────────────────────────────────────────────────
+  // Cycle status messages
   useEffect(() => {
     if (state !== "verifying") return;
     const t = setInterval(() => setStepIndex((i) => Math.min(i + 1, STEPS.length - 1)), 950);
     return () => clearInterval(t);
   }, [state]);
 
-  // ── Watch auth store → redirect when session confirmed ────────────────────
+  // Watch auth store — when session hydrates, redirect
   useEffect(() => {
     if (redirected.current || state === "error") return;
     if (isHydrating) return;
@@ -76,9 +53,13 @@ function VerifyingContent() {
       return;
     }
 
-    // Hydration done but not authenticated — show error
-    setErrorMsg("Sign-in could not be completed. Please try again.");
-    setState("error");
+    // Not authenticated yet — could still be propagating
+    // Retry a few times before giving up
+    attempts.current += 1;
+    if (attempts.current >= 3) {
+      setErrorMsg("Session could not be confirmed. Please try signing in again.");
+      setState("error");
+    }
   }, [isHydrating, isAuthenticated, redirectPath, router, state]);
 
   return (
@@ -112,8 +93,7 @@ function VerifyingContent() {
             {state === "verifying" && (
               <motion.div key="spinner" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
-                  <circle cx="40" cy="40" r="34" fill="none"
-                    stroke="rgba(212,165,255,0.1)" strokeWidth="4" />
+                  <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(212,165,255,0.1)" strokeWidth="4" />
                   <motion.circle cx="40" cy="40" r="34" fill="none" stroke="#d4a5ff"
                     strokeWidth="4" strokeLinecap="round"
                     strokeDasharray={`${2 * Math.PI * 34}`}
@@ -156,14 +136,12 @@ function VerifyingContent() {
               </div>
             </motion.div>
           )}
-
           {state === "success" && (
             <motion.div key="s" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-1">
               <p className="text-soft-white font-semibold text-base">You&apos;re in!</p>
               <p className="text-muted-lavender text-sm">Redirecting you now…</p>
             </motion.div>
           )}
-
           {state === "error" && (
             <motion.div key="e" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
               className="space-y-4 w-full"
@@ -175,8 +153,7 @@ function VerifyingContent() {
                 </p>
               </div>
               <div className="flex flex-col gap-2 w-full max-w-xs mx-auto">
-                <button
-                  onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
+                <button onClick={() => router.push(`/auth?redirectTo=${encodeURIComponent(redirectPath)}`)}
                   className="flex items-center justify-center gap-2 h-11 rounded-xl bg-lilac text-deep-purple font-semibold text-sm hover:bg-lilac/90 transition-colors"
                 >
                   <Mail className="w-4 h-4" /> Try signing in again

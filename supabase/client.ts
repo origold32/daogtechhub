@@ -1,8 +1,7 @@
 // supabase/client.ts
-// Browser-side Supabase client — singleton, implicit flow (no PKCE).
-// PKCE is disabled because the code_verifier is lost on full-page navigation
-// (Google redirects to a new page, wiping the in-memory verifier).
-// Implicit flow sends tokens directly in the URL hash — no verifier needed.
+// Browser-side Supabase client — module-level singleton.
+// Uses the default PKCE flow. The code_verifier is stored in cookies
+// by @supabase/ssr so it is available server-side in the callback route.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
@@ -21,13 +20,6 @@ export const createClient = () => {
     );
   }
 
-  _instance = createBrowserClient<Database>(url, key, {
-    auth: {
-      flowType: "implicit",   // no PKCE — tokens come in the URL hash
-      detectSessionInUrl: true,
-      persistSession: true,
-      autoRefreshToken: true,
-    },
-  });
+  _instance = createBrowserClient<Database>(url, key);
   return _instance;
 };

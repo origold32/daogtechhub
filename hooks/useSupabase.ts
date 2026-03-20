@@ -344,12 +344,12 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
     const siteUrl  = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // Implicit flow: Supabase returns tokens in the URL hash (#access_token=...)
-    // directly to /auth/verifying — no PKCE code exchange needed.
+    // PKCE flow: Google redirects to /auth/callback?code=XXX
+    // The server route reads the code_verifier from cookies and exchanges the code.
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
+      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
     });
     setIsLoading(false);
     return error
