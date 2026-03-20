@@ -220,8 +220,7 @@ export function CategoryNavigation({ category }: CategoryNavigationProps) {
           <motion.div
             initial={{ opacity: 0, y: -10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}
             className="fixed left-0 right-0 z-[99] px-4 py-3 border-b border-lilac/10"
-            style={{ top: 36 + 52 }}
-            style={{ background: "rgba(26,11,46,0.98)" }}
+            style={{ top: 36 + 52, background: "rgba(26,11,46,0.98)" }}
           >
             <SmartSearch />
           </motion.div>
