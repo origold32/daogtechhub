@@ -2,6 +2,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
+import { supabase } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
@@ -10,17 +11,16 @@ export function useSignOut() {
 
   const handleSignOut = useCallback(async () => {
     setLoading(true);
-    try {
-      // Sign out from Supabase (clears session cookies + localStorage)
-      const { getSupabaseBrowserClient } = await import("@/lib/supabaseClient");
-      await getSupabaseBrowserClient().auth.signOut();
-    } catch {
-      // Continue even if Supabase call fails
+    const { error } = await supabase.auth.signOut();
+    if (error) {
+      console.error("Sign-out failed:", error.message);
+      setLoading(false);
+      return;
     }
-    // Clear client state
+    // Clear client stores
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
-    // Hard redirect — clears all in-memory state, forces middleware re-check
+    // Hard redirect — resets all JS state, forces server session re-check
     window.location.href = "/";
   }, []);
 

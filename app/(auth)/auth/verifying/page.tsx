@@ -1,19 +1,9 @@
 // app/(auth)/auth/verifying/page.tsx
-// Auth completion page for ALL flows: Google OAuth, Email magic link, OTP.
+// Completes ALL auth flows: Google OAuth, email magic link, email OTP.
 //
-// How it works:
-// ┌─────────────────────────────────────────────────────────────┐
-// │ Google OAuth / Email magic link:                            │
-// │   Supabase redirects here with ?code= or ?token_hash=      │
-// │   @supabase/ssr's createBrowserClient detects these in URL  │
-// │   and exchanges them automatically → fires SIGNED_IN event  │
-// │                                                             │
-// │ Manual OTP:                                                 │
-// │   verifyOtp() already established the session.              │
-// │   INITIAL_SESSION fires with valid session → redirect.      │
-// └─────────────────────────────────────────────────────────────┘
-// We do NOT manually call exchangeCodeForSession or fetch().
-// We just initialize the client (which auto-exchanges) and wait for the event.
+// @supabase/ssr's createBrowserClient auto-detects ?code= or ?token_hash= in the URL
+// and exchanges them on initialization. We poll getSession() until session appears.
+// For manual OTP the session is already established — first poll succeeds immediately.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -21,7 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
-import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { supabase } from "@/lib/supabaseClient";
 
 const STEPS = [
   "Verifying your identity…",
@@ -40,77 +30,56 @@ function VerifyingContent() {
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const done = useRef(false);
+  const cancelled = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
   useEffect(() => {
-    if (done.current) return;
-    done.current = true;
+    cancelled.current = false;
 
-    // Get the singleton client — this is the same instance that called
-    // signInWithOAuth or signInWithOtp, so it has the code_verifier in cookies.
-    // @supabase/ssr automatically detects ?code= or ?token_hash= in the URL
-    // and calls exchangeCodeForSession / verifyOtp internally.
-    const supabase = getSupabaseBrowserClient();
-
-    const go = (path: string) => {
-      setUiState("success");
-      setTimeout(() => router.replace(path), 600);
+    const waitForSession = async () => {
+      // Poll for up to 10 × 300ms = 3s for the session to be established.
+      // @supabase/ssr exchanges the OAuth code automatically on client init.
+      // For OTP, the session is already there and the first poll succeeds.
+      for (let i = 0; i < 10; i++) {
+        if (cancelled.current) return;
+        const { data, error } = await supabase.auth.getSession();
+        if (error) {
+          if (!cancelled.current) {
+            setErrorMsg("Sign-in failed. Please try again.");
+            setUiState("error");
+          }
+          return;
+        }
+        if (data.session) {
+          if (!cancelled.current) {
+            setUiState("success");
+            setTimeout(() => router.replace(redirectPath), 600);
+          }
+          return;
+        }
+        // Session not ready yet — wait and retry
+        await new Promise(r => setTimeout(r, 300));
+      }
+      // Exhausted all retries
+      if (!cancelled.current) {
+        setErrorMsg("Sign-in timed out. Please try again.");
+        setUiState("error");
+      }
     };
 
-    const fail = (msg: string) => {
-      setErrorMsg(msg);
-      setUiState("error");
-    };
+    waitForSession();
 
-    // Subscribe FIRST — never miss the event
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      if (event === "SIGNED_IN" && session?.user) {
-        subscription.unsubscribe();
-        go(redirectPath);
-      } else if (event === "SIGNED_OUT") {
-        subscription.unsubscribe();
-        fail("Session could not be established. Please sign in again.");
-      }
-    });
-
-    // Also check existing session (for OTP flow where session is already set)
-    supabase.auth.getSession().then(({ data: { session }, error }) => {
-      if (error) {
-        subscription.unsubscribe();
-        fail("Sign-in failed. Please try again.");
-        return;
-      }
-      if (session?.user) {
-        subscription.unsubscribe();
-        go(redirectPath);
-      }
-      // else: wait for onAuthStateChange to fire (OAuth/magic link exchange in progress)
-    });
-
-    return () => subscription.unsubscribe();
+    return () => { cancelled.current = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Animate step messages
+  // Cycle status messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
-
-  // Safety timeout — 20s
-  useEffect(() => {
-    const t = setTimeout(() => {
-      if (uiState === "verifying") {
-        setErrorMsg("Sign-in timed out. Please try again.");
-        setUiState("error");
-      }
-    }, 20000);
-    return () => clearTimeout(t);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
 
   return (
     <div
