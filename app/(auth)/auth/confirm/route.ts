@@ -1,15 +1,15 @@
 export const dynamic = "force-dynamic";
-// app/(auth)/auth/callback/route.ts
-// Official @supabase/ssr PKCE callback handler.
+// app/(auth)/auth/confirm/route.ts
+// Handles direct email-link clicks from Gmail / email clients.
 //
-// Flow: Google → Supabase → here with ?code=
-// 1. createServerClient reads the code_verifier cookie (set by browser before OAuth redirect)
-// 2. exchangeCodeForSession exchanges code + verifier with Supabase
+// Flow: User clicks link in email → Supabase sends ?token_hash=XXX&type=email here
+// 1. createServerClient reads token_hash from URL
+// 2. verifyOtp() exchanges token server-side (stateless — no code_verifier needed)
 // 3. Session cookies are written onto the redirect response
-// 4. Browser receives session cookies and is redirected to /auth/verifying
-// 5. /auth/verifying reads the session from cookies and redirects to profile
+// 4. Browser is redirected to /auth/verifying which shows success UI
 //
-// This is the ONLY place code exchange happens. No browser client is involved.
+// This is separate from OAuth (/auth/callback) because email links use
+// token_hash verification, not PKCE code exchange.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -17,39 +17,34 @@ import { createServerClient } from "@supabase/ssr";
 export async function GET(request: NextRequest) {
   const { searchParams, origin } = new URL(request.url);
 
-  const code        = searchParams.get("code");
-  const next        = searchParams.get("next") ?? "/profile";
-  const errorParam  = searchParams.get("error");
-  const errorDesc   = searchParams.get("error_description");
+  const tokenHash  = searchParams.get("token_hash");
+  const type       = (searchParams.get("type") ?? "email") as
+    "email" | "signup" | "magiclink" | "recovery" | "invite" | "email_change";
+  const next       = searchParams.get("next") ?? "/profile";
+  const errorParam = searchParams.get("error");
+  const errorDesc  = searchParams.get("error_description");
 
-  // Surface OAuth provider errors
   if (errorParam) {
-    const msg = errorDesc ?? errorParam;
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(msg)}`
+      `${origin}/auth?error=${encodeURIComponent(errorDesc ?? errorParam)}`
     );
   }
 
-  if (!code) {
-    // No code — could be OTP flow landing here, just go to verifying
-    return NextResponse.redirect(`${origin}/auth/verifying`);
+  if (!tokenHash) {
+    return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent("Invalid sign-in link.")}`);
   }
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
-  // Build the success redirect URL — verifying page confirms session to user
   const redirectPath = next.startsWith("/") ? next : "/profile";
   const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
   let   response     = NextResponse.redirect(successUrl);
 
-  // createServerClient reads code_verifier from incoming request cookies
-  // and writes session tokens to the outgoing redirect response
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
-      getAll: ()               => request.cookies.getAll(),
-      setAll: (cookiesToSet)   => {
-        // Write cookies to both request (for in-handler reads) and response (for browser)
+      getAll: () => request.cookies.getAll(),
+      setAll: (cookiesToSet) => {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.redirect(successUrl);
         cookiesToSet.forEach(({ name, value, options }) =>
@@ -59,30 +54,36 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  // Try the declared type first, then fallback through common types
+  const typesToTry: typeof type[] = [type, "email", "magiclink", "signup", "recovery", "invite", "email_change"];
+  const ordered = [...new Set(typesToTry)]; // deduplicate
 
-  if (error || !data.user) {
-    console.error("[callback] PKCE exchange failed:", error?.message);
+  let succeeded = false;
+  for (const t of ordered) {
+    const { data, error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: t });
+    if (!error && data.user) {
+      upsertProfile(data.user).catch(() => {});
+      succeeded = true;
+      break;
+    }
+  }
+
+  if (!succeeded) {
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent("Sign-in failed. Please try again.")}`
+      `${origin}/auth?error=${encodeURIComponent("Sign-in link has expired or already been used. Please request a new one.")}`
     );
   }
 
-  // Upsert profile non-blocking
-  upsertProfile(data.user).catch(() => {});
-
-  return response; // response carries sb-* session cookies
+  return response; // carries session cookies
 }
 
 async function upsertProfile(user: {
-  id: string;
-  email?: string | null;
-  phone?: string | null;
+  id: string; email?: string | null; phone?: string | null;
   user_metadata?: Record<string, unknown>;
 }) {
   if (!process.env.SUPABASE_SERVICE_ROLE_KEY) return;
   const { createClient } = await import("@supabase/supabase-js");
-  const service = createClient(
+  const svc = createClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.SUPABASE_SERVICE_ROLE_KEY,
     { auth: { autoRefreshToken: false, persistSession: false } }
@@ -90,7 +91,7 @@ async function upsertProfile(user: {
   const meta  = (user.user_metadata ?? {}) as Record<string, string>;
   const raw   = meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "User";
   const parts = raw.trim().split(/\s+/);
-  await service.from("profiles").upsert({
+  await svc.from("profiles").upsert({
     id:         user.id,
     email:      user.email      ?? null,
     phone:      user.phone      ?? null,

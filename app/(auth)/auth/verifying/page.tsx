@@ -1,9 +1,12 @@
 // app/(auth)/auth/verifying/page.tsx
-// Completes ALL auth flows: Google OAuth, email magic link, email OTP.
+// UI-only session confirmation page.
 //
-// @supabase/ssr's createBrowserClient auto-detects ?code= or ?token_hash= in the URL
-// and exchanges them on initialization. We poll getSession() until session appears.
-// For manual OTP the session is already established — first poll succeeds immediately.
+// Receives users after:
+//   /auth/callback  — completed Google OAuth PKCE exchange (session in cookies)
+//   /auth/confirm   — completed email link verification (session in cookies)
+//   manual OTP      — session established by verifyOtp() before redirect here
+//
+// No auth exchange happens here. Just reads the session and redirects.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -37,10 +40,10 @@ function VerifyingContent() {
   useEffect(() => {
     cancelled.current = false;
 
+    // Poll getSession — session is already in cookies from the server route.
+    // For OTP, session was established by verifyOtp() client-side.
+    // Poll up to 10 × 400ms = 4s to allow cookie propagation.
     const waitForSession = async () => {
-      // Poll for up to 10 × 300ms = 3s for the session to be established.
-      // @supabase/ssr exchanges the OAuth code automatically on client init.
-      // For OTP, the session is already there and the first poll succeeds.
       for (let i = 0; i < 10; i++) {
         if (cancelled.current) return;
         const { data, error } = await getSupabaseBrowserClient().auth.getSession();
@@ -58,23 +61,19 @@ function VerifyingContent() {
           }
           return;
         }
-        // Session not ready yet — wait and retry
-        await new Promise(r => setTimeout(r, 300));
+        await new Promise(r => setTimeout(r, 400));
       }
-      // Exhausted all retries
       if (!cancelled.current) {
-        setErrorMsg("Sign-in timed out. Please try again.");
+        setErrorMsg("Session could not be confirmed. Please sign in again.");
         setUiState("error");
       }
     };
 
     waitForSession();
-
     return () => { cancelled.current = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Cycle status messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
