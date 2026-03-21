@@ -1,22 +1,19 @@
 // lib/supabaseClient.ts
-// Single Supabase browser client for the entire app.
-// Uses @supabase/ssr defaults — do NOT override storage or storageKey.
-// @supabase/ssr manages the PKCE code_verifier internally using its own key scheme.
-// Any override (custom storageKey, custom storage) breaks the verifier lookup.
+// Creates a fresh Supabase browser client on each call.
+// NO singleton — singletons break across page navigations because each
+// page load is a fresh JS environment in Next.js.
+// @supabase/ssr uses cookies (not memory) to persist the PKCE code_verifier,
+// so creating a new client instance on the callback page correctly reads
+// the verifier that was stored by the instance on the auth page.
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { Database } from "@/types/database";
 
-type BrowserClient = ReturnType<typeof createBrowserClient<Database>>;
-let _instance: BrowserClient | undefined;
-
-export function getSupabaseBrowserClient(): BrowserClient {
-  if (!_instance) {
-    _instance = createBrowserClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
-      // No custom auth options — use @supabase/ssr defaults exactly
-    );
-  }
-  return _instance;
+export function getSupabaseBrowserClient() {
+  // Always create a fresh instance — it reads verifier from cookies, not memory.
+  // This is safe: @supabase/ssr deduplicates active sessions via cookie storage.
+  return createBrowserClient<Database>(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+  );
 }

@@ -1,6 +1,7 @@
 // app/(auth)/auth/verifying/page.tsx
 // Handles all auth completions client-side.
-// PKCE verifier is in localStorage — exchange must happen in the browser, not server.
+// A fresh createBrowserClient reads the PKCE code_verifier from cookies (set by @supabase/ssr).
+// Cookies persist across page navigations, so the verifier is always available here.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
