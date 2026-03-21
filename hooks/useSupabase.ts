@@ -146,7 +146,7 @@ export function useSessionHydration() {
     // of the if-branches and `isHydrating` was never cleared. Added explicit
     // handling so the app stops showing the loading skeleton for anonymous users.
     const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      async (event, session) => {
+      async (event: import("@supabase/supabase-js").AuthChangeEvent, session: import("@supabase/supabase-js").Session | null) => {
         // ── User logged in (or page loaded with existing session) ─────────────
         if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
           const uid = session.user.id;
