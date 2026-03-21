@@ -10,10 +10,10 @@ export const axiosBaseInstance = axios.create({
 });
 
 // ── Supabase client — uses the app-wide singleton ────────────────────────────
-import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
 function getSupabaseClient() {
   if (typeof window === "undefined") return null;
-  try { return getSupabaseBrowserClient(); } catch { return null; }
+  return _getClient()Instance;
 }
 
 // ── Request: attach Supabase JWT ──────────────────────────────────────────────

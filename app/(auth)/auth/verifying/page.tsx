@@ -11,7 +11,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
-import { supabase } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 const STEPS = [
   "Verifying your identity…",
@@ -43,7 +43,7 @@ function VerifyingContent() {
       // For OTP, the session is already there and the first poll succeeds.
       for (let i = 0; i < 10; i++) {
         if (cancelled.current) return;
-        const { data, error } = await supabase.auth.getSession();
+        const { data, error } = await getSupabaseBrowserClient().auth.getSession();
         if (error) {
           if (!cancelled.current) {
             setErrorMsg("Sign-in failed. Please try again.");

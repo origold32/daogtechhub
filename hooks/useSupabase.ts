@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { supabase as _supabase } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
 function getClient() {
   if (typeof window === "undefined") return null;
-  return _supabase;
+  return _getClient();
 }
 
 // ── Friendly error mapper ─────────────────────────────────────────────────────
