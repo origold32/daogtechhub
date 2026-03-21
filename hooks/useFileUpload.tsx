@@ -2,7 +2,7 @@
 "use client";
 
 import { useState, useCallback, useRef } from "react";
-import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 export interface UseFileUploadReturn {
   /** 0–100 upload progress */
@@ -45,7 +45,7 @@ export function useFileUpload(bucket = "avatars"): UseFileUploadReturn {
 
   const upload = useCallback(
     async (file: File, pathPrefix = ""): Promise<string | null> => {
-      const client = _supabaseClient;
+      const client = getSupabaseBrowserClient();
 
       abortRef.current = new AbortController();
 
