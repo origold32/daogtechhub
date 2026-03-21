@@ -2,13 +2,13 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
-import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { supabase as _supabase } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
 function getClient() {
   if (typeof window === "undefined") return null;
-  try { return getSupabaseBrowserClient(); } catch { return null; }
+  return _supabase;
 }
 
 // ── Friendly error mapper ─────────────────────────────────────────────────────
@@ -125,7 +125,7 @@ export function useSessionHydration() {
     // This resolves hydration instantly from the cached session (no network call),
     // eliminating the blank/spinner delay that users see while waiting for the
     // onAuthStateChange INITIAL_SESSION event to fire (~500–1500ms on slow tabs).
-    supabase.auth.getSession().then(({ data: { session } }) => {
+    supabase.auth.getSession().then(({ data }: { data: { session: import("@supabase/supabase-js").Session | null } }) => { const session = data.session;
       // Only act if we're still hydrating (INITIAL_SESSION hasn't fired yet)
       if (!useAuthStore.getState().isHydrating) return;
 
