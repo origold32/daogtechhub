@@ -342,15 +342,18 @@ export function useSupabaseAuth() {
     const supabase = getClient();
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    // PKCE flow: Supabase sends ?code= to /auth/callback (server route).
-    // The server route exchanges the code, sets session cookies, then redirects
-    // to /auth/verifying which shows the success UI and redirects to profile.
+
+    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
+
+    // PKCE flow: code goes to /auth/callback (server route) which calls
+    // exchangeCodeForSession. createBrowserClient (@supabase/ssr) manages
+    // the code_verifier in cookies — preserved through OAuth redirect.
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
+      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
     });
+
     setIsLoading(false);
     return error
       ? { success: false as const, error: toFriendlyError(error.message) }

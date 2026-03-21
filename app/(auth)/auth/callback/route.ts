@@ -1,9 +1,7 @@
 export const dynamic = "force-dynamic";
 // app/(auth)/auth/callback/route.ts
-// Handles Google OAuth PKCE code exchange server-side.
-// The code_verifier is stored in a cookie (pkce_verifier) that we wrote
-// in signInWithOAuth using skipBrowserRedirect before navigating to Google.
-// HTTP cookies survive cross-origin redirects in all browsers including Brave.
+// Official Supabase SSR OAuth callback. Exchanges PKCE code for session.
+// Uses x-forwarded-host for correct redirect URL on Vercel.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
@@ -23,58 +21,50 @@ export async function GET(request: NextRequest) {
   }
 
   if (!code) {
-    return NextResponse.redirect(`${origin}/auth/verifying`);
+    return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent("Missing auth code.")}`);
   }
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
-  const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
-  let   response     = NextResponse.redirect(successUrl);
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  // Use x-forwarded-host for correct domain on Vercel (avoids internal hostname)
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const host = forwardedHost && process.env.NODE_ENV !== "development"
+    ? `https://${forwardedHost}`
+    : origin;
 
-  // Read the pkce_verifier cookie that signInWithOAuth saved before redirecting
-  const cookieVerifier = request.cookies.get("pkce_verifier")?.value;
+  const successUrl = `${host}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
+  let   response   = NextResponse.redirect(successUrl);
 
-  // Build a server client. If we have the verifier from our cookie, inject it.
-  const allCookies = request.cookies.getAll();
-  
-  // If we have our saved verifier, also inject it under the supabase key
-  const projectRef = supabaseUrl.split("//")[1]?.split(".")[0] ?? "";
-  const supabaseVerifierKey = `sb-${projectRef}-auth-token-code-verifier`;
-  
-  const enrichedCookies = cookieVerifier
-    ? [...allCookies, { name: supabaseVerifierKey, value: decodeURIComponent(cookieVerifier) }]
-    : allCookies;
-
-  const supabase = createServerClient(supabaseUrl, supabaseKey, {
-    cookies: {
-      getAll: () => enrichedCookies,
-      setAll: (cookiesToSet) => {
-        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-        response = NextResponse.redirect(successUrl);
-        cookiesToSet.forEach(({ name, value, options }) =>
-          response.cookies.set(name, value, options)
-        );
+  // createServerClient reads the code_verifier cookie from the incoming request.
+  // @supabase/ssr's createBrowserClient set this cookie before the OAuth redirect.
+  // HTTP cookies with SameSite=Lax are always preserved across top-level navigations.
+  const supabase = createServerClient(
+    process.env.NEXT_PUBLIC_SUPABASE_URL!,
+    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    {
+      cookies: {
+        getAll: () => request.cookies.getAll(),
+        setAll: (cookiesToSet) => {
+          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          response = NextResponse.redirect(successUrl);
+          cookiesToSet.forEach(({ name, value, options }) =>
+            response.cookies.set(name, value, options)
+          );
+        },
       },
-    },
-  });
+    }
+  );
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.user) {
-    // Fallback: forward code to client page for localStorage-based exchange
-    const dest = new URL(`${origin}/auth/verifying`);
-    dest.searchParams.set("code", code);
-    dest.searchParams.set("next", redirectPath);
-    const fallback = NextResponse.redirect(dest.toString());
-    // Clear the stale pkce_verifier cookie
-    fallback.cookies.set("pkce_verifier", "", { maxAge: 0, path: "/" });
-    return fallback;
+    console.error("[callback] exchange failed:", error?.message);
+    return NextResponse.redirect(
+      `${host}/auth?error=${encodeURIComponent(error?.message ?? "Sign-in failed.")}`
+    );
   }
 
-  // Clear the pkce_verifier cookie on success
-  response.cookies.set("pkce_verifier", "", { maxAge: 0, path: "/" });
+  response.headers.set("Cache-Control", "private, no-store");
   upsertProfile(data.user).catch(() => {});
   return response;
 }
@@ -94,12 +84,10 @@ async function upsertProfile(user: {
   const raw   = meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "User";
   const parts = raw.trim().split(/\s+/);
   await svc.from("profiles").upsert({
-    id:         user.id,
-    email:      user.email      ?? null,
-    phone:      user.phone      ?? null,
-    first_name: meta.first_name ?? parts[0]                ?? "User",
+    id: user.id, email: user.email ?? null, phone: user.phone ?? null,
+    first_name: meta.first_name ?? parts[0] ?? "User",
     last_name:  meta.last_name  ?? parts.slice(1).join(" ") ?? "",
-    avatar_url: meta.avatar_url ?? meta.picture            ?? null,
-    role:       "customer",
+    avatar_url: meta.avatar_url ?? meta.picture ?? null,
+    role: "customer",
   }, { onConflict: "id", ignoreDuplicates: false });
 }

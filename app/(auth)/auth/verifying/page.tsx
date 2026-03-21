@@ -1,16 +1,5 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles ALL auth completion flows.
-//
-// PKCE OAuth (?code= present):
-//   Uses the same singleton client instance that called signInWithOAuth.
-//   That instance stored the code_verifier in localStorage.
-//   exchangeCodeForSession reads it from localStorage → succeeds in all browsers.
-//
-// Email magic link (?token_hash= present):
-//   Redirects to /auth/confirm server route (stateless, no verifier needed).
-//
-// OTP / returning session (no params):
-//   Polls getSession() — session already established.
+// Pure UI. No auth logic. Polls getSession() after server routes complete.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -20,21 +9,13 @@ import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
-const STEPS = [
-  "Verifying your identity…",
-  "Securing your session…",
-  "Loading your profile…",
-  "Almost there…",
-];
-type UIState = "verifying" | "success" | "error";
+const STEPS = ["Verifying your identity…","Securing your session…","Loading your profile…","Almost there…"];
+type UIState = "verifying"|"success"|"error";
 
 function VerifyingContent() {
-  const router     = useRouter();
-  const params     = useSearchParams();
-  const next       = params.get("next") ?? "/profile";
-  const code       = params.get("code");
-  const tokenHash  = params.get("token_hash");
-  const type       = params.get("type") ?? "email";
+  const router = useRouter();
+  const params = useSearchParams();
+  const next   = params.get("next") ?? "/profile";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -46,50 +27,24 @@ function VerifyingContent() {
     if (done.current) return;
     done.current = true;
 
-    // ── Email magic link: forward to server confirm route ───────────────
-    // token_hash verification is stateless — no verifier needed.
-    // Server route handles it and redirects back here without params.
-    if (tokenHash) {
-      const dest = new URL("/auth/confirm", window.location.origin);
-      dest.searchParams.set("token_hash", tokenHash);
-      dest.searchParams.set("type", type);
-      dest.searchParams.set("next", redirectPath);
-      window.location.replace(dest.toString());
-      return;
-    }
-
     const supabase = getSupabaseBrowserClient();
 
-    const succeed = () => {
-      setUiState("success");
-      setTimeout(() => router.replace(redirectPath), 500);
-    };
-    const fail = (msg: string) => { setErrorMsg(msg); setUiState("error"); };
-
-    async function run() {
-      // ── PKCE OAuth: exchange code using singleton browser client ───────
-      // The singleton stored the code_verifier in localStorage during signInWithOAuth.
-      // This same instance reads it here — localStorage persists in Brave.
-      if (code) {
-        // Clean URL to prevent re-processing on refresh
-        window.history.replaceState({}, "", `${window.location.pathname}?next=${encodeURIComponent(redirectPath)}`);
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) { fail(error.message); return; }
-        succeed();
-        return;
-      }
-
-      // ── No params: poll for session (OTP or after server routes) ───────
+    const checkSession = async () => {
       for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
-        if (error) { fail("Sign-in failed. Please try again."); return; }
-        if (data.session) { succeed(); return; }
-        await new Promise(r => setTimeout(r, 300));
+        if (error) { setErrorMsg("Sign-in failed. Please try again."); setUiState("error"); return; }
+        if (data.session) {
+          setUiState("success");
+          setTimeout(() => router.replace(redirectPath), 500);
+          return;
+        }
+        await new Promise(r => setTimeout(r, 250));
       }
-      fail("Session could not be confirmed. Please sign in again.");
-    }
+      setErrorMsg("Session could not be confirmed. Please sign in again.");
+      setUiState("error");
+    };
 
-    run().catch(e => fail(e?.message ?? "Unexpected error."));
+    checkSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -98,19 +53,6 @@ function VerifyingContent() {
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
-
-  // Minimal spinner while forwarding to /auth/confirm
-  if (tokenHash) {
-    return (
-      <div className="min-h-screen flex items-center justify-center"
-        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
-        <div className="flex flex-col items-center gap-4">
-          <AppLogo width={48} height={48} />
-          <p className="text-muted-lavender text-sm">Completing sign-in…</p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
@@ -178,8 +120,7 @@ function VerifyingContent() {
             </motion.div>
           )}
           {uiState === "error" && (
-            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-              className="space-y-5 w-full">
+            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
               <div>
                 <p className="text-soft-white font-semibold text-base mb-1">Sign-in failed</p>
                 <p className="text-muted-lavender text-sm leading-relaxed max-w-[260px] mx-auto">

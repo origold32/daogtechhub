@@ -1,25 +1,30 @@
 // supabase/middleware.ts
+// Official Supabase SSR middleware pattern.
+// Refreshes session on every request. Never intercepts auth routes.
+
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 import type { Database } from "@/types/database";
 
 const PROTECTED_PATHS   = ["/profile", "/orders", "/admin", "/wishlist", "/checkout", "/inbox"];
 const PUBLIC_EXCEPTIONS = ["/checkout/verify", "/payment/callback"];
+// Auth routes must never be intercepted — they handle their own flows
+const AUTH_PATHS        = ["/auth/callback", "/auth/confirm", "/auth/verifying", "/auth"];
 
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Pass all /auth/* pages through — no processing, no redirects.
-  // Auth routes handle their own logic.
-  if (pathname.startsWith("/auth")) {
-    return NextResponse.next({ request });
+  // Pass auth routes through completely untouched with cache-control
+  if (AUTH_PATHS.some(p => pathname.startsWith(p))) {
+    const res = NextResponse.next({ request });
+    res.headers.set("Cache-Control", "private, no-store");
+    return res;
   }
 
   let supabaseResponse = NextResponse.next({ request });
 
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-  if (!supabaseUrl || !supabaseKey) return supabaseResponse;
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
     cookies: {
@@ -34,7 +39,7 @@ export async function updateSession(request: NextRequest) {
     },
   });
 
-  // Refresh session — keeps tokens valid
+  // getUser() refreshes the session token if needed
   const { data: { user }, error: userError } = await supabase.auth.getUser();
 
   const isPublicException = PUBLIC_EXCEPTIONS.some(p => pathname.startsWith(p));
@@ -55,10 +60,6 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  if (pathname === "/auth" && user && !userError) {
-    const redirectTo = request.nextUrl.searchParams.get("redirectTo") ?? "/profile";
-    return NextResponse.redirect(new URL(redirectTo, request.url));
-  }
-
+  supabaseResponse.headers.set("Cache-Control", "private, no-store");
   return supabaseResponse;
 }
