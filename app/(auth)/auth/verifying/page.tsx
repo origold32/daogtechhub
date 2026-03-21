@@ -1,7 +1,13 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles all auth completions client-side.
-// A fresh createBrowserClient reads the PKCE code_verifier from cookies (set by @supabase/ssr).
-// Cookies persist across page navigations, so the verifier is always available here.
+// Handles auth completion for implicit flow and OTP.
+//
+// Implicit flow (Google OAuth):
+//   Supabase returns #access_token=X&refresh_token=Y in URL hash.
+//   createBrowserClient with detectSessionInUrl:true auto-processes it.
+//   We just call getSession() to confirm and redirect.
+//
+// OTP flow:
+//   Session already established by verifyOtp(). getSession() returns it immediately.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -21,12 +27,11 @@ const STEPS = [
 type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
-  const router   = useRouter();
-  const params   = useSearchParams();
-  const next     = params.get("next") ?? "/profile";
-  const code     = params.get("code");
-  const tokenHash = params.get("token_hash");
-  const type     = params.get("type") ?? "email";
+  const router      = useRouter();
+  const params      = useSearchParams();
+  const next        = params.get("next") ?? "/profile";
+  const tokenHash   = params.get("token_hash");
+  const type        = params.get("type") ?? "email";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -43,49 +48,35 @@ function VerifyingContent() {
 
     const succeed = () => {
       setUiState("success");
-      // Clean URL params
-      window.history.replaceState({}, "", "/auth/verifying");
       setTimeout(() => router.replace(redirectPath), 500);
     };
-
-    const fail = (msg: string) => {
-      setErrorMsg(msg);
-      setUiState("error");
-    };
+    const fail = (msg: string) => { setErrorMsg(msg); setUiState("error"); };
 
     async function run() {
-      // ── PKCE OAuth: ?code= in URL ────────────────────────────────────────
-      // Exchange client-side — verifier is in localStorage (same browser session).
-      if (code) {
-        const { error } = await supabase.auth.exchangeCodeForSession(code);
-        if (error) {
-          fail(error.message);
-        } else {
-          succeed();
-        }
-        return;
-      }
-
-      // ── Email token_hash ─────────────────────────────────────────────────
+      // ── Email token_hash (magic link) ──────────────────────────────────
       if (tokenHash) {
-        const types = [type as "email"|"magiclink"|"signup", "email", "magiclink", "signup"] as const;
+        const tryTypes = [type, "email", "magiclink", "signup"] as const;
         const seen = new Set<string>();
-        for (const t of types) {
-          if (seen.has(t)) continue;
-          seen.add(t);
-          const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: t });
+        for (const t of tryTypes) {
+          if (seen.has(t)) continue; seen.add(t);
+          const { error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: t as "email" | "magiclink" | "signup",
+          });
           if (!error) { succeed(); return; }
         }
         fail("Sign-in link has expired. Please request a new one.");
         return;
       }
 
-      // ── No params: OTP already verified or session in cookies ────────────
-      for (let i = 0; i < 12; i++) {
+      // ── Implicit flow / OTP: poll getSession ───────────────────────────
+      // For implicit flow, createBrowserClient auto-exchanges the hash on init.
+      // For OTP, session is already set. Either way getSession() returns it fast.
+      for (let i = 0; i < 15; i++) {
         const { data, error } = await supabase.auth.getSession();
         if (error) { fail("Sign-in failed. Please try again."); return; }
         if (data.session) { succeed(); return; }
-        await new Promise(r => setTimeout(r, 350));
+        await new Promise(r => setTimeout(r, 300));
       }
       fail("Session could not be confirmed. Please sign in again.");
     }
