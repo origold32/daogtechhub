@@ -62,9 +62,11 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.user) {
-    console.error("[callback] PKCE exchange failed:", error?.message);
+    const errMsg = error?.message ?? "No user returned";
+    console.error("[callback] PKCE exchange failed:", errMsg);
+    // Pass the real error so it's visible during debugging
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent("Sign-in failed. Please try again.")}`
+      `${origin}/auth?error=${encodeURIComponent(errMsg)}`
     );
   }
 
