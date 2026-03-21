@@ -45,7 +45,7 @@ export function useFileUpload(bucket = "avatars"): UseFileUploadReturn {
 
   const upload = useCallback(
     async (file: File, pathPrefix = ""): Promise<string | null> => {
-      const client = _supabaseClient;
+      const client = _getClient();
 
       abortRef.current = new AbortController();
 
