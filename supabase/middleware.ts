@@ -9,8 +9,32 @@ const PUBLIC_EXCEPTIONS = ["/checkout/verify", "/payment/callback"];
 export async function updateSession(request: NextRequest) {
   const pathname = request.nextUrl.pathname;
 
-  // Never interfere with auth pages — especially /auth/verifying?code=
-  // The PKCE code_verifier cookie must not be touched here
+  // ── Server-side forwarding for stale JS ────────────────────────────────────
+  // If a cached browser JS sends ?code= or ?token_hash= to /auth/verifying,
+  // redirect server-side to the correct handler BEFORE any client JS runs.
+  // This preserves cookies perfectly (server 302, no client navigation).
+  if (pathname === "/auth/verifying") {
+    const url = request.nextUrl;
+    const code      = url.searchParams.get("code");
+    const tokenHash = url.searchParams.get("token_hash");
+    const next      = url.searchParams.get("next") ?? "/profile";
+
+    if (code) {
+      const dest = new URL("/auth/callback", request.url);
+      dest.searchParams.set("code", code);
+      dest.searchParams.set("next", next);
+      return NextResponse.redirect(dest);
+    }
+    if (tokenHash) {
+      const dest = new URL("/auth/confirm", request.url);
+      dest.searchParams.set("token_hash", tokenHash);
+      dest.searchParams.set("type", url.searchParams.get("type") ?? "email");
+      dest.searchParams.set("next", next);
+      return NextResponse.redirect(dest);
+    }
+  }
+
+  // Pass all other /auth/* pages through without any Supabase processing
   if (pathname.startsWith("/auth")) {
     return NextResponse.next({ request });
   }

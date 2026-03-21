@@ -1,13 +1,11 @@
 // app/(auth)/auth/verifying/page.tsx
-// Universal auth landing page — works regardless of which route Google redirects to.
+// Session confirmation UI — shown after server routes complete auth exchange.
 //
-// Entry scenarios handled:
-//   ?code=XXX       → Google OAuth landed here (cached JS or Supabase config).
-//                     Immediately forward to /auth/callback for server-side exchange.
-//   ?token_hash=XXX → Email link landed here instead of /auth/confirm.
-//                     Immediately forward to /auth/confirm for server-side verification.
-//   (nothing)       → Arrived after /auth/callback or /auth/confirm completed.
-//                     Session is in cookies. Poll getSession() then redirect.
+// The middleware handles forwarding any stray ?code= or ?token_hash= params
+// to the correct server routes (/auth/callback, /auth/confirm) BEFORE this
+// page loads. So by the time this page renders, the session is already in cookies.
+//
+// This page just polls getSession() until cookies propagate, then redirects.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -29,58 +27,26 @@ type UIState = "verifying" | "success" | "error";
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
-
-  const code       = params.get("code");
-  const tokenHash  = params.get("token_hash");
-  const type       = params.get("type") ?? "email";
-  const next       = params.get("next") ?? "/profile";
+  const next   = params.get("next") ?? "/profile";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const cancelled   = useRef(false);
-  const forwarded   = useRef(false);
+  const cancelled = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
   useEffect(() => {
     cancelled.current = false;
-    if (forwarded.current) return;
 
-    // ── Case 1: ?code= present — forward to /auth/callback (server route) ──
-    // /auth/callback does the PKCE exchange correctly server-side.
-    // This handles: cached browser JS, Supabase dashboard config, any redirectTo mismatch.
-    if (code) {
-      forwarded.current = true;
-      const dest = new URL("/auth/callback", window.location.origin);
-      dest.searchParams.set("code", code);
-      dest.searchParams.set("next", redirectPath);
-      window.location.replace(dest.toString());
-      return;
-    }
-
-    // ── Case 2: ?token_hash= present — forward to /auth/confirm (server route) ──
-    if (tokenHash) {
-      forwarded.current = true;
-      const dest = new URL("/auth/confirm", window.location.origin);
-      dest.searchParams.set("token_hash", tokenHash);
-      dest.searchParams.set("type", type);
-      dest.searchParams.set("next", redirectPath);
-      window.location.replace(dest.toString());
-      return;
-    }
-
-    // ── Case 3: No params — session already set by server route ──────────────
-    // Poll getSession() until cookies propagate (usually instant, ≤400ms).
-    const waitForSession = async () => {
+    // Session is already in cookies — set by /auth/callback or /auth/confirm.
+    // Poll until getSession() returns it (usually first poll succeeds).
+    const poll = async () => {
       for (let i = 0; i < 12; i++) {
         if (cancelled.current) return;
         const { data, error } = await getSupabaseBrowserClient().auth.getSession();
         if (error) {
-          if (!cancelled.current) {
-            setErrorMsg("Sign-in failed. Please try again.");
-            setUiState("error");
-          }
+          if (!cancelled.current) { setErrorMsg("Sign-in failed. Please try again."); setUiState("error"); }
           return;
         }
         if (data.session) {
@@ -98,50 +64,23 @@ function VerifyingContent() {
       }
     };
 
-    waitForSession();
+    poll();
     return () => { cancelled.current = true; };
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Animate step messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
 
-  // If we're about to forward (code/token present), show minimal spinner — no flash
-  if (code || tokenHash) {
-    return (
-      <div className="min-h-screen flex items-center justify-center"
-        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
-        <div className="flex flex-col items-center gap-5">
-          <AppLogo width={48} height={48} />
-          <svg className="w-10 h-10 -rotate-90" viewBox="0 0 40 40">
-            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(212,165,255,0.15)" strokeWidth="3" />
-            <motion.circle cx="20" cy="20" r="16" fill="none" stroke="#d4a5ff"
-              strokeWidth="3" strokeLinecap="round"
-              strokeDasharray={`${2 * Math.PI * 16}`}
-              animate={{ strokeDashoffset: [2 * Math.PI * 16, 0] }}
-              transition={{ duration: 1.2, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
-            />
-          </svg>
-          <p className="text-muted-lavender text-sm">Completing sign-in…</p>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div
-      className="min-h-screen flex flex-col items-center justify-center px-4"
-      style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}
-    >
-      <motion.div
-        initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+    <div className="min-h-screen flex flex-col items-center justify-center px-4"
+      style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
+      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
-        className="flex flex-col items-center gap-8 w-full max-w-sm text-center"
-      >
+        className="flex flex-col items-center gap-8 w-full max-w-sm text-center">
         <AppLogo width={52} height={52} />
 
         <div className="relative w-20 h-20 flex items-center justify-center">
