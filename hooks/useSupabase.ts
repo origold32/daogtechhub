@@ -349,7 +349,7 @@ export function useSupabaseAuth() {
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/verifying${nextParam}` },
+      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
     });
     setIsLoading(false);
     return error

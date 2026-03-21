@@ -1,13 +1,13 @@
 // app/(auth)/auth/verifying/page.tsx
-// Handles auth completion for implicit flow and OTP.
+// Pure UI page — no auth logic.
 //
-// Implicit flow (Google OAuth):
-//   Supabase returns #access_token=X&refresh_token=Y in URL hash.
-//   createBrowserClient with detectSessionInUrl:true auto-processes it.
-//   We just call getSession() to confirm and redirect.
+// This page is shown AFTER server routes complete authentication:
+//   /auth/callback → handles Google OAuth PKCE exchange
+//   /auth/confirm  → handles email magic link verification
 //
-// OTP flow:
-//   Session already established by verifyOtp(). getSession() returns it immediately.
+// Both server routes set session cookies then redirect here.
+// This page simply polls getSession() until cookies are readable, then redirects.
+// For manual OTP: verifyOtp() sets the session before redirect, first poll succeeds.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -30,14 +30,11 @@ function VerifyingContent() {
   const router      = useRouter();
   const params      = useSearchParams();
   const next        = params.get("next") ?? "/profile";
-  const tokenHash   = params.get("token_hash");
-  const type        = params.get("type") ?? "email";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const done = useRef(false);
-
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
   useEffect(() => {
@@ -46,42 +43,30 @@ function VerifyingContent() {
 
     const supabase = getSupabaseBrowserClient();
 
-    const succeed = () => {
-      setUiState("success");
-      setTimeout(() => router.replace(redirectPath), 500);
-    };
-    const fail = (msg: string) => { setErrorMsg(msg); setUiState("error"); };
-
-    async function run() {
-      // ── Email token_hash (magic link) ──────────────────────────────────
-      if (tokenHash) {
-        const tryTypes = [type, "email", "magiclink", "signup"] as const;
-        const seen = new Set<string>();
-        for (const t of tryTypes) {
-          if (seen.has(t)) continue; seen.add(t);
-          const { error } = await supabase.auth.verifyOtp({
-            token_hash: tokenHash,
-            type: t as "email" | "magiclink" | "signup",
-          });
-          if (!error) { succeed(); return; }
-        }
-        fail("Sign-in link has expired. Please request a new one.");
-        return;
-      }
-
-      // ── Implicit flow / OTP: poll getSession ───────────────────────────
-      // For implicit flow, createBrowserClient auto-exchanges the hash on init.
-      // For OTP, session is already set. Either way getSession() returns it fast.
-      for (let i = 0; i < 15; i++) {
+    async function waitForSession() {
+      // Poll up to 20 × 300ms = 6s for session cookies to become readable.
+      // Server routes (/auth/callback, /auth/confirm) set cookies on the redirect
+      // response. By the time this page's JS runs, cookies are already set.
+      // First poll almost always succeeds immediately.
+      for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
-        if (error) { fail("Sign-in failed. Please try again."); return; }
-        if (data.session) { succeed(); return; }
+        if (error) {
+          setErrorMsg("Sign-in failed. Please try again.");
+          setUiState("error");
+          return;
+        }
+        if (data.session) {
+          setUiState("success");
+          setTimeout(() => router.replace(redirectPath), 500);
+          return;
+        }
         await new Promise(r => setTimeout(r, 300));
       }
-      fail("Session could not be confirmed. Please sign in again.");
+      setErrorMsg("Session could not be confirmed. Please sign in again.");
+      setUiState("error");
     }
 
-    run().catch(e => fail(e?.message ?? "Unexpected error."));
+    waitForSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -97,7 +82,9 @@ function VerifyingContent() {
       <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center gap-8 w-full max-w-sm text-center">
+
         <AppLogo width={52} height={52} />
+
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {uiState === "success" && (
@@ -131,6 +118,7 @@ function VerifyingContent() {
             )}
           </AnimatePresence>
         </div>
+
         <AnimatePresence mode="wait">
           {uiState === "verifying" && (
             <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
