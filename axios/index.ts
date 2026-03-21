@@ -13,7 +13,7 @@ export const axiosBaseInstance = axios.create({
 import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
 function getSupabaseClient() {
   if (typeof window === "undefined") return null;
-  return _getClient()Instance;
+  return _getClient();
 }
 
 // ── Request: attach Supabase JWT ──────────────────────────────────────────────
