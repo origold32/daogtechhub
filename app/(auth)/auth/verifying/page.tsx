@@ -1,11 +1,6 @@
 // app/(auth)/auth/verifying/page.tsx
-// Session confirmation UI — shown after server routes complete auth exchange.
-//
-// The middleware handles forwarding any stray ?code= or ?token_hash= params
-// to the correct server routes (/auth/callback, /auth/confirm) BEFORE this
-// page loads. So by the time this page renders, the session is already in cookies.
-//
-// This page just polls getSession() until cookies propagate, then redirects.
+// Handles all auth completions client-side.
+// PKCE verifier is in localStorage — exchange must happen in the browser, not server.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -25,47 +20,76 @@ const STEPS = [
 type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
-  const router = useRouter();
-  const params = useSearchParams();
-  const next   = params.get("next") ?? "/profile";
+  const router   = useRouter();
+  const params   = useSearchParams();
+  const next     = params.get("next") ?? "/profile";
+  const code     = params.get("code");
+  const tokenHash = params.get("token_hash");
+  const type     = params.get("type") ?? "email";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const cancelled = useRef(false);
+  const done = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
   useEffect(() => {
-    cancelled.current = false;
+    if (done.current) return;
+    done.current = true;
 
-    // Session is already in cookies — set by /auth/callback or /auth/confirm.
-    // Poll until getSession() returns it (usually first poll succeeds).
-    const poll = async () => {
-      for (let i = 0; i < 12; i++) {
-        if (cancelled.current) return;
-        const { data, error } = await getSupabaseBrowserClient().auth.getSession();
-        if (error) {
-          if (!cancelled.current) { setErrorMsg("Sign-in failed. Please try again."); setUiState("error"); }
-          return;
-        }
-        if (data.session) {
-          if (!cancelled.current) {
-            setUiState("success");
-            setTimeout(() => router.replace(redirectPath), 500);
-          }
-          return;
-        }
-        await new Promise(r => setTimeout(r, 350));
-      }
-      if (!cancelled.current) {
-        setErrorMsg("Session could not be confirmed. Please sign in again.");
-        setUiState("error");
-      }
+    const supabase = getSupabaseBrowserClient();
+
+    const succeed = () => {
+      setUiState("success");
+      // Clean URL params
+      window.history.replaceState({}, "", "/auth/verifying");
+      setTimeout(() => router.replace(redirectPath), 500);
     };
 
-    poll();
-    return () => { cancelled.current = true; };
+    const fail = (msg: string) => {
+      setErrorMsg(msg);
+      setUiState("error");
+    };
+
+    async function run() {
+      // ── PKCE OAuth: ?code= in URL ────────────────────────────────────────
+      // Exchange client-side — verifier is in localStorage (same browser session).
+      if (code) {
+        const { error } = await supabase.auth.exchangeCodeForSession(code);
+        if (error) {
+          fail(error.message);
+        } else {
+          succeed();
+        }
+        return;
+      }
+
+      // ── Email token_hash ─────────────────────────────────────────────────
+      if (tokenHash) {
+        const types = [type as "email"|"magiclink"|"signup", "email", "magiclink", "signup"] as const;
+        const seen = new Set<string>();
+        for (const t of types) {
+          if (seen.has(t)) continue;
+          seen.add(t);
+          const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type: t });
+          if (!error) { succeed(); return; }
+        }
+        fail("Sign-in link has expired. Please request a new one.");
+        return;
+      }
+
+      // ── No params: OTP already verified or session in cookies ────────────
+      for (let i = 0; i < 12; i++) {
+        const { data, error } = await supabase.auth.getSession();
+        if (error) { fail("Sign-in failed. Please try again."); return; }
+        if (data.session) { succeed(); return; }
+        await new Promise(r => setTimeout(r, 350));
+      }
+      fail("Session could not be confirmed. Please sign in again.");
+    }
+
+    run().catch(e => fail(e?.message ?? "Unexpected error."));
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -82,7 +106,6 @@ function VerifyingContent() {
         transition={{ duration: 0.4 }}
         className="flex flex-col items-center gap-8 w-full max-w-sm text-center">
         <AppLogo width={52} height={52} />
-
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {uiState === "success" && (
@@ -116,7 +139,6 @@ function VerifyingContent() {
             )}
           </AnimatePresence>
         </div>
-
         <AnimatePresence mode="wait">
           {uiState === "verifying" && (
             <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
