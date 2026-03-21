@@ -1,12 +1,13 @@
 // app/(auth)/auth/verifying/page.tsx
-// UI-only session confirmation page.
+// Universal auth landing page — works regardless of which route Google redirects to.
 //
-// Receives users after:
-//   /auth/callback  — completed Google OAuth PKCE exchange (session in cookies)
-//   /auth/confirm   — completed email link verification (session in cookies)
-//   manual OTP      — session established by verifyOtp() before redirect here
-//
-// No auth exchange happens here. Just reads the session and redirects.
+// Entry scenarios handled:
+//   ?code=XXX       → Google OAuth landed here (cached JS or Supabase config).
+//                     Immediately forward to /auth/callback for server-side exchange.
+//   ?token_hash=XXX → Email link landed here instead of /auth/confirm.
+//                     Immediately forward to /auth/confirm for server-side verification.
+//   (nothing)       → Arrived after /auth/callback or /auth/confirm completed.
+//                     Session is in cookies. Poll getSession() then redirect.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -28,23 +29,51 @@ type UIState = "verifying" | "success" | "error";
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const next   = params.get("next") ?? "/profile";
+
+  const code       = params.get("code");
+  const tokenHash  = params.get("token_hash");
+  const type       = params.get("type") ?? "email";
+  const next       = params.get("next") ?? "/profile";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
-  const cancelled = useRef(false);
+  const cancelled   = useRef(false);
+  const forwarded   = useRef(false);
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
   useEffect(() => {
     cancelled.current = false;
+    if (forwarded.current) return;
 
-    // Poll getSession — session is already in cookies from the server route.
-    // For OTP, session was established by verifyOtp() client-side.
-    // Poll up to 10 × 400ms = 4s to allow cookie propagation.
+    // ── Case 1: ?code= present — forward to /auth/callback (server route) ──
+    // /auth/callback does the PKCE exchange correctly server-side.
+    // This handles: cached browser JS, Supabase dashboard config, any redirectTo mismatch.
+    if (code) {
+      forwarded.current = true;
+      const dest = new URL("/auth/callback", window.location.origin);
+      dest.searchParams.set("code", code);
+      dest.searchParams.set("next", redirectPath);
+      window.location.replace(dest.toString());
+      return;
+    }
+
+    // ── Case 2: ?token_hash= present — forward to /auth/confirm (server route) ──
+    if (tokenHash) {
+      forwarded.current = true;
+      const dest = new URL("/auth/confirm", window.location.origin);
+      dest.searchParams.set("token_hash", tokenHash);
+      dest.searchParams.set("type", type);
+      dest.searchParams.set("next", redirectPath);
+      window.location.replace(dest.toString());
+      return;
+    }
+
+    // ── Case 3: No params — session already set by server route ──────────────
+    // Poll getSession() until cookies propagate (usually instant, ≤400ms).
     const waitForSession = async () => {
-      for (let i = 0; i < 10; i++) {
+      for (let i = 0; i < 12; i++) {
         if (cancelled.current) return;
         const { data, error } = await getSupabaseBrowserClient().auth.getSession();
         if (error) {
@@ -57,11 +86,11 @@ function VerifyingContent() {
         if (data.session) {
           if (!cancelled.current) {
             setUiState("success");
-            setTimeout(() => router.replace(redirectPath), 600);
+            setTimeout(() => router.replace(redirectPath), 500);
           }
           return;
         }
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 350));
       }
       if (!cancelled.current) {
         setErrorMsg("Session could not be confirmed. Please sign in again.");
@@ -74,11 +103,34 @@ function VerifyingContent() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Animate step messages
   useEffect(() => {
     if (uiState !== "verifying") return;
     const t = setInterval(() => setStepIndex(i => Math.min(i + 1, STEPS.length - 1)), 900);
     return () => clearInterval(t);
   }, [uiState]);
+
+  // If we're about to forward (code/token present), show minimal spinner — no flash
+  if (code || tokenHash) {
+    return (
+      <div className="min-h-screen flex items-center justify-center"
+        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
+        <div className="flex flex-col items-center gap-5">
+          <AppLogo width={48} height={48} />
+          <svg className="w-10 h-10 -rotate-90" viewBox="0 0 40 40">
+            <circle cx="20" cy="20" r="16" fill="none" stroke="rgba(212,165,255,0.15)" strokeWidth="3" />
+            <motion.circle cx="20" cy="20" r="16" fill="none" stroke="#d4a5ff"
+              strokeWidth="3" strokeLinecap="round"
+              strokeDasharray={`${2 * Math.PI * 16}`}
+              animate={{ strokeDashoffset: [2 * Math.PI * 16, 0] }}
+              transition={{ duration: 1.2, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
+            />
+          </svg>
+          <p className="text-muted-lavender text-sm">Completing sign-in…</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
