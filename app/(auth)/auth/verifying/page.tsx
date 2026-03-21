@@ -1,13 +1,5 @@
 // app/(auth)/auth/verifying/page.tsx
-// Pure UI page — no auth logic.
-//
-// This page is shown AFTER server routes complete authentication:
-//   /auth/callback → handles Google OAuth PKCE exchange
-//   /auth/confirm  → handles email magic link verification
-//
-// Both server routes set session cookies then redirect here.
-// This page simply polls getSession() until cookies are readable, then redirects.
-// For manual OTP: verifyOtp() sets the session before redirect, first poll succeeds.
+// UI confirmation page. Also handles stale JS that sends ?code= here directly.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -17,19 +9,16 @@ import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
-const STEPS = [
-  "Verifying your identity…",
-  "Securing your session…",
-  "Loading your profile…",
-  "Almost there…",
-];
-
-type UIState = "verifying" | "success" | "error";
+const STEPS = ["Verifying your identity…","Securing your session…","Loading your profile…","Almost there…"];
+type UIState = "verifying"|"success"|"error";
 
 function VerifyingContent() {
-  const router      = useRouter();
-  const params      = useSearchParams();
-  const next        = params.get("next") ?? "/profile";
+  const router  = useRouter();
+  const params  = useSearchParams();
+  const next    = params.get("next") ?? "/profile";
+  const code    = params.get("code");
+  const tokenHash = params.get("token_hash");
+  const type    = params.get("type") ?? "email";
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -41,31 +30,39 @@ function VerifyingContent() {
     if (done.current) return;
     done.current = true;
 
-    const supabase = getSupabaseBrowserClient();
+    // ── If ?code= arrived here (stale JS), redirect to server callback ──────
+    // Uses top-level navigation so all HTTP cookies travel with the request.
+    // /auth/callback does the PKCE exchange server-side and sets session cookies.
+    if (code) {
+      const dest = new URL("/auth/callback", window.location.origin);
+      dest.searchParams.set("code", code);
+      dest.searchParams.set("next", redirectPath);
+      window.location.replace(dest.toString());
+      return;
+    }
 
+    // ── If ?token_hash= arrived here, redirect to server confirm route ───────
+    if (tokenHash) {
+      const dest = new URL("/auth/confirm", window.location.origin);
+      dest.searchParams.set("token_hash", tokenHash);
+      dest.searchParams.set("type", type);
+      dest.searchParams.set("next", redirectPath);
+      window.location.replace(dest.toString());
+      return;
+    }
+
+    // ── No params: session should be in cookies from server route ────────────
+    const supabase = getSupabaseBrowserClient();
     async function waitForSession() {
-      // Poll up to 20 × 300ms = 6s for session cookies to become readable.
-      // Server routes (/auth/callback, /auth/confirm) set cookies on the redirect
-      // response. By the time this page's JS runs, cookies are already set.
-      // First poll almost always succeeds immediately.
       for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
-        if (error) {
-          setErrorMsg("Sign-in failed. Please try again.");
-          setUiState("error");
-          return;
-        }
-        if (data.session) {
-          setUiState("success");
-          setTimeout(() => router.replace(redirectPath), 500);
-          return;
-        }
+        if (error) { setErrorMsg("Sign-in failed. Please try again."); setUiState("error"); return; }
+        if (data.session) { setUiState("success"); setTimeout(() => router.replace(redirectPath), 500); return; }
         await new Promise(r => setTimeout(r, 300));
       }
       setErrorMsg("Session could not be confirmed. Please sign in again.");
       setUiState("error");
     }
-
     waitForSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -76,26 +73,40 @@ function VerifyingContent() {
     return () => clearInterval(t);
   }, [uiState]);
 
+  // Show simple spinner while redirecting to server route
+  if (code || tokenHash) {
+    return (
+      <div className="min-h-screen flex items-center justify-center"
+        style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
+        <div className="flex flex-col items-center gap-5">
+          <AppLogo width={48} height={48} />
+          <motion.div animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: "linear" }}>
+            <svg className="w-8 h-8" viewBox="0 0 32 32">
+              <circle cx="16" cy="16" r="12" fill="none" stroke="rgba(212,165,255,0.2)" strokeWidth="3"/>
+              <path d="M16 4 A12 12 0 0 1 28 16" fill="none" stroke="#d4a5ff" strokeWidth="3" strokeLinecap="round"/>
+            </svg>
+          </motion.div>
+          <p className="text-muted-lavender text-sm">Completing sign-in…</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex flex-col items-center justify-center px-4"
       style={{ background: "radial-gradient(ellipse at 60% 0%, #2d1052 0%, #1a0b2e 60%, #0f0720 100%)" }}>
-      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.4 }}
+      <motion.div initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}
         className="flex flex-col items-center gap-8 w-full max-w-sm text-center">
-
         <AppLogo width={52} height={52} />
-
         <div className="relative w-20 h-20 flex items-center justify-center">
           <AnimatePresence mode="wait">
             {uiState === "success" && (
-              <motion.div key="c" initial={{ scale: 0 }} animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <motion.div key="c" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                 <CheckCircle2 className="w-20 h-20 text-lilac" strokeWidth={1.5} />
               </motion.div>
             )}
             {uiState === "error" && (
-              <motion.div key="x" initial={{ scale: 0 }} animate={{ scale: 1 }}
-                transition={{ type: "spring", stiffness: 300, damping: 20 }}>
+              <motion.div key="x" initial={{ scale: 0 }} animate={{ scale: 1 }} transition={{ type: "spring", stiffness: 300, damping: 20 }}>
                 <XCircle className="w-20 h-20 text-red-400" strokeWidth={1.5} />
               </motion.div>
             )}
@@ -103,8 +114,7 @@ function VerifyingContent() {
               <motion.div key="s" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
                 <svg className="w-20 h-20 -rotate-90" viewBox="0 0 80 80">
                   <circle cx="40" cy="40" r="34" fill="none" stroke="rgba(212,165,255,0.12)" strokeWidth="4" />
-                  <motion.circle cx="40" cy="40" r="34" fill="none" stroke="#d4a5ff"
-                    strokeWidth="4" strokeLinecap="round"
+                  <motion.circle cx="40" cy="40" r="34" fill="none" stroke="#d4a5ff" strokeWidth="4" strokeLinecap="round"
                     strokeDasharray={`${2 * Math.PI * 34}`}
                     animate={{ strokeDashoffset: [2 * Math.PI * 34, 0] }}
                     transition={{ duration: 2.4, ease: "easeInOut", repeat: Infinity, repeatType: "reverse" }}
@@ -118,17 +128,12 @@ function VerifyingContent() {
             )}
           </AnimatePresence>
         </div>
-
         <AnimatePresence mode="wait">
           {uiState === "verifying" && (
-            <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: -6 }} className="space-y-3">
+            <motion.div key="v" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} className="space-y-3">
               <AnimatePresence mode="wait">
-                <motion.p key={stepIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}
-                  className="text-soft-white font-semibold text-base">
-                  {STEPS[stepIndex]}
-                </motion.p>
+                <motion.p key={stepIndex} initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -6 }} transition={{ duration: 0.25 }}
+                  className="text-soft-white font-semibold text-base">{STEPS[stepIndex]}</motion.p>
               </AnimatePresence>
               <p className="text-muted-lavender text-xs">Please keep this tab open</p>
               <div className="flex items-center justify-center gap-2 pt-1">
@@ -147,8 +152,7 @@ function VerifyingContent() {
             </motion.div>
           )}
           {uiState === "error" && (
-            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-              className="space-y-5 w-full">
+            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
               <div>
                 <p className="text-soft-white font-semibold text-base mb-1">Sign-in failed</p>
                 <p className="text-muted-lavender text-sm leading-relaxed max-w-[260px] mx-auto">
