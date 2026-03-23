@@ -1,7 +1,7 @@
 // DAOG Tech Hub — Service Worker
 // Provides offline support, smart caching, and background sync
 
-const CACHE_VERSION = "daog-v1";
+const CACHE_VERSION = "daog-v2";
 const STATIC_CACHE  = `${CACHE_VERSION}-static`;
 const DYNAMIC_CACHE = `${CACHE_VERSION}-dynamic`;
 const IMAGE_CACHE   = `${CACHE_VERSION}-images`;
@@ -54,6 +54,18 @@ self.addEventListener("fetch", (event) => {
 
   // Skip non-GET and cross-origin requests
   if (request.method !== "GET" || url.origin !== self.location.origin) return;
+
+  // Auth routes and any URL with auth params must NEVER be cached.
+  // Service worker caching of auth callbacks breaks PKCE cookie flow.
+  const isAuthRoute =
+    url.pathname.startsWith("/auth") ||
+    url.pathname.startsWith("/api/auth");
+  const hasAuthParams =
+    url.searchParams.has("code") ||
+    url.searchParams.has("token_hash") ||
+    url.searchParams.has("error") ||
+    url.searchParams.has("error_description");
+  if (isAuthRoute || hasAuthParams) return;
 
   // API routes: network-first with short timeout
   if (url.pathname.startsWith("/api/")) {

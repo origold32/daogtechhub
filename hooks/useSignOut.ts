@@ -13,21 +13,21 @@ export function useSignOut() {
     if (loading) return;
     setLoading(true);
 
-    try {
-      // scope: 'global' invalidates all sessions across all devices
-      await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
-    } catch (err) {
-      console.error("Sign-out error:", err);
+    const { error } = await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
+    if (error) {
+      console.error("Sign-out failed:", error.message);
+      setLoading(false);
+      return;
     }
 
-    // Always clear local state even if signOut API call fails
+    // Clear all client-side state
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
 
-    // refresh() clears Next.js server-side render cache so protected
-    // pages immediately see the logged-out state on next navigation
+    // router.refresh() clears Next.js server cache
+    // window.location.replace ensures hard navigation — no stale authenticated UI
     router.refresh();
-    router.replace("/");
+    window.location.replace("/");
   }, [loading, router]);
 
   return { handleSignOut, loading };

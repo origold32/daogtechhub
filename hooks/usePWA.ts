@@ -25,6 +25,26 @@ export function usePWA() {
   // ── Register SW ──────────────────────────────────────────────────────────
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
+
+    const pathname = window.location.pathname;
+    const search   = new URLSearchParams(window.location.search);
+
+    // Auth routes must never be controlled by the service worker.
+    // SW caching of auth callbacks breaks PKCE cookie flow.
+    const isAuthRoute =
+      pathname.startsWith("/auth") ||
+      search.has("code") ||
+      search.has("token_hash") ||
+      search.has("error");
+
+    if (isAuthRoute) {
+      // Unregister any existing SW so it cannot intercept auth flows
+      navigator.serviceWorker.getRegistrations().then((regs) => {
+        regs.forEach((reg) => reg.unregister());
+      });
+      return;
+    }
+
     navigator.serviceWorker
       .register("/sw.js", { scope: "/" })
       .then((reg) => {

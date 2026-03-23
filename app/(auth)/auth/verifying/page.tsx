@@ -26,18 +26,29 @@ function VerifyingContent() {
   const done = useRef(false);
   const redirectPath = next.startsWith("/") ? next : "/profile";
 
+  // Self-heal: if ?code= or ?token_hash= land here (stale links or old build),
+  // immediately redirect to the correct server route before anything else runs.
+  useEffect(() => {
+    const search = new URLSearchParams(window.location.search);
+    if (search.has("code")) {
+      console.warn("[/auth/verifying] ?code= received — self-healing redirect to /auth/callback");
+      window.location.replace(`/auth/callback?${search.toString()}`);
+      return;
+    }
+    if (search.has("token_hash")) {
+      console.warn("[/auth/verifying] ?token_hash= received — self-healing redirect to /auth/confirm");
+      window.location.replace(`/auth/confirm?${search.toString()}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (done.current) return;
     done.current = true;
 
-    // Architecture guard: ?code= should never land here.
-    // It means the OAuth redirectTo is wrong — surface it immediately.
-    if (code) {
-      console.error("[/auth/verifying] Received ?code= — OAuth redirectTo is misconfigured. Code should go to /auth/callback.");
-      setErrorMsg("OAuth callback misconfiguration. Please contact support or try again.");
-      setUiState("error");
-      return;
-    }
+    // If code/token_hash are present, the above effect handles it.
+    // Don't start session polling in that case.
+    if (code) return;
 
     // Normal path: session already established by /auth/callback or /auth/confirm.
     // Poll until cookies are readable by the browser client.

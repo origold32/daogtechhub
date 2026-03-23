@@ -343,24 +343,39 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
 
-    // Always use window.location.origin — do NOT rely on NEXT_PUBLIC_SITE_URL
-    // which may be misconfigured in Vercel environment variables.
-    const siteUrl   = window.location.origin;
-    const redirectPath_ = redirectPath && redirectPath !== "/" ? redirectPath : "/profile";
-    const redirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(redirectPath_)}`;
+    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
 
-    // Temporary production debug log — remove after auth is confirmed working
-    console.log("[signInWithOAuth] provider:", provider, "redirectTo:", redirectTo);
-
-    const { error } = await supabase.auth.signInWithOAuth({
+    // skipBrowserRedirect so we can copy the code_verifier to a cookie BEFORE
+    // the browser navigates away to Google. HTTP cookies with SameSite=Lax
+    // survive cross-origin OAuth redirects in all browsers including Brave,
+    // even when localStorage/sessionStorage gets partitioned.
+    const { data, error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo },
+      options: {
+        redirectTo: `${siteUrl}/auth/callback${nextParam}`,
+        skipBrowserRedirect: true,
+      },
     });
 
+    if (error || !data?.url) {
+      setIsLoading(false);
+      return { success: false as const, error: toFriendlyError(error?.message ?? "OAuth failed") };
+    }
+
+    // Copy verifier from localStorage to a cookie so server callback can read it
+    try {
+      const projectRef  = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").split("//")[1]?.split(".")[0] ?? "";
+      const verifierKey = `sb-${projectRef}-auth-token-code-verifier`;
+      const verifier    = localStorage.getItem(verifierKey);
+      if (verifier) {
+        document.cookie = `pkce_verifier=${encodeURIComponent(verifier)}; path=/; SameSite=Lax; Secure`;
+      }
+    } catch { /* non-critical */ }
+
     setIsLoading(false);
-    return error
-      ? { success: false as const, error: toFriendlyError(error.message) }
-      : { success: true  as const };
+    window.location.href = data.url;
+    return { success: true as const };
   }, []);
 
   // Password sign-in
