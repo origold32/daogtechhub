@@ -343,15 +343,18 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
 
-    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
+    // Always use window.location.origin — do NOT rely on NEXT_PUBLIC_SITE_URL
+    // which may be misconfigured in Vercel environment variables.
+    const siteUrl   = window.location.origin;
+    const redirectPath_ = redirectPath && redirectPath !== "/" ? redirectPath : "/profile";
+    const redirectTo = `${siteUrl}/auth/callback?next=${encodeURIComponent(redirectPath_)}`;
 
-    // PKCE flow: code goes to /auth/callback (server route) which calls
-    // exchangeCodeForSession. createBrowserClient (@supabase/ssr) manages
-    // the code_verifier in cookies — preserved through OAuth redirect.
+    // Temporary production debug log — remove after auth is confirmed working
+    console.log("[signInWithOAuth] provider:", provider, "redirectTo:", redirectTo);
+
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
-      options: { redirectTo: `${siteUrl}/auth/callback${nextParam}` },
+      options: { redirectTo },
     });
 
     setIsLoading(false);

@@ -1,5 +1,7 @@
 // app/(auth)/auth/verifying/page.tsx
-// Pure UI. No auth logic. Polls getSession() after server routes complete.
+// UI-only session confirmation page. No auth logic.
+// If ?code= arrives here, it means the wrong redirect URL is configured —
+// immediately surface this as an error rather than looping silently.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -10,12 +12,13 @@ import AppLogo from "@/components/reusables/app-logo";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 
 const STEPS = ["Verifying your identity…","Securing your session…","Loading your profile…","Almost there…"];
-type UIState = "verifying"|"success"|"error";
+type UIState = "verifying" | "success" | "error";
 
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
   const next   = params.get("next") ?? "/profile";
+  const code   = params.get("code"); // should NEVER be here
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -27,8 +30,18 @@ function VerifyingContent() {
     if (done.current) return;
     done.current = true;
 
-    const supabase = getSupabaseBrowserClient();
+    // Architecture guard: ?code= should never land here.
+    // It means the OAuth redirectTo is wrong — surface it immediately.
+    if (code) {
+      console.error("[/auth/verifying] Received ?code= — OAuth redirectTo is misconfigured. Code should go to /auth/callback.");
+      setErrorMsg("OAuth callback misconfiguration. Please contact support or try again.");
+      setUiState("error");
+      return;
+    }
 
+    // Normal path: session already established by /auth/callback or /auth/confirm.
+    // Poll until cookies are readable by the browser client.
+    const supabase = getSupabaseBrowserClient();
     const checkSession = async () => {
       for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
@@ -120,7 +133,8 @@ function VerifyingContent() {
             </motion.div>
           )}
           {uiState === "error" && (
-            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} className="space-y-5 w-full">
+            <motion.div key="err" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
+              className="space-y-5 w-full">
               <div>
                 <p className="text-soft-white font-semibold text-base mb-1">Sign-in failed</p>
                 <p className="text-muted-lavender text-sm leading-relaxed max-w-[260px] mx-auto">

@@ -10,19 +10,25 @@ export function useSignOut() {
   const router = useRouter();
 
   const handleSignOut = useCallback(async () => {
+    if (loading) return;
     setLoading(true);
-    const { error } = await getSupabaseBrowserClient().auth.signOut();
-    if (error) {
-      console.error("Sign-out failed:", error.message);
-      setLoading(false);
-      return;
+
+    try {
+      // scope: 'global' invalidates all sessions across all devices
+      await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
+    } catch (err) {
+      console.error("Sign-out error:", err);
     }
+
+    // Always clear local state even if signOut API call fails
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
-    // router.refresh() clears server-side session cache, then redirect
+
+    // refresh() clears Next.js server-side render cache so protected
+    // pages immediately see the logged-out state on next navigation
     router.refresh();
-    router.push("/");
-  }, [router]);
+    router.replace("/");
+  }, [loading, router]);
 
   return { handleSignOut, loading };
 }

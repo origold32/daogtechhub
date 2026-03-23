@@ -1,43 +1,45 @@
 export const dynamic = "force-dynamic";
 // app/(auth)/auth/callback/route.ts
-// Official Supabase SSR OAuth callback. Exchanges PKCE code for session.
-// Uses x-forwarded-host for correct redirect URL on Vercel.
+// Official Supabase SSR PKCE callback — server-side code exchange.
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
 
   const code       = searchParams.get("code");
   const next       = searchParams.get("next") ?? "/profile";
   const errorParam = searchParams.get("error");
   const errorDesc  = searchParams.get("error_description");
 
+  // x-forwarded-host gives the real public domain on Vercel
+  const forwardedHost = request.headers.get("x-forwarded-host");
+  const origin = forwardedHost && process.env.NODE_ENV !== "development"
+    ? `https://${forwardedHost}`
+    : new URL(request.url).origin;
+
+  // Temporary debug logging — remove after auth confirmed working
+  console.log("[/auth/callback] incoming URL:", request.url);
+  console.log("[/auth/callback] code present:", !!code);
+  console.log("[/auth/callback] origin resolved:", origin);
+
   if (errorParam) {
+    console.error("[/auth/callback] provider error:", errorParam, errorDesc);
     return NextResponse.redirect(
       `${origin}/auth?error=${encodeURIComponent(errorDesc ?? errorParam)}`
     );
   }
 
   if (!code) {
+    console.error("[/auth/callback] no code — redirecting to auth");
     return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent("Missing auth code.")}`);
   }
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
+  const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
+  let   response     = NextResponse.redirect(successUrl);
 
-  // Use x-forwarded-host for correct domain on Vercel (avoids internal hostname)
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = forwardedHost && process.env.NODE_ENV !== "development"
-    ? `https://${forwardedHost}`
-    : origin;
-
-  const successUrl = `${host}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
-  let   response   = NextResponse.redirect(successUrl);
-
-  // createServerClient reads the code_verifier cookie from the incoming request.
-  // @supabase/ssr's createBrowserClient set this cookie before the OAuth redirect.
-  // HTTP cookies with SameSite=Lax are always preserved across top-level navigations.
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
@@ -57,10 +59,11 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
+  console.log("[/auth/callback] exchangeCodeForSession success:", !!data?.user, "error:", error?.message ?? "none");
+
   if (error || !data.user) {
-    console.error("[callback] exchange failed:", error?.message);
     return NextResponse.redirect(
-      `${host}/auth?error=${encodeURIComponent(error?.message ?? "Sign-in failed.")}`
+      `${origin}/auth?error=${encodeURIComponent(error?.message ?? "Sign-in failed.")}`
     );
   }
 
