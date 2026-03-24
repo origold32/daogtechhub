@@ -333,8 +333,15 @@ export function useSupabaseAuth() {
   }, []);
 
   // OAuth redirect (Google / Facebook)
-  // BUG FIX #7: accept optional redirectPath and append as ?next= so after
-  // OAuth the callback route sends the user to the right page, not always "/".
+  // Accepts optional redirectPath and appends as ?next= so after OAuth the
+  // callback route sends the user to the right page, not always "/".
+  //
+  // IMPORTANT: Do NOT use skipBrowserRedirect:true here. @supabase/ssr's
+  // createBrowserClient stores the PKCE code_verifier in a cookie automatically
+  // before the redirect. Intercepting with skipBrowserRedirect and manually
+  // copying from localStorage is wrong — the verifier lives in cookies, not
+  // localStorage — and causes the "code challenge does not match previously
+  // saved code verifier" error on the callback.
   const signInWithOAuth = useCallback(async (
     provider: "google" | "facebook",
     redirectPath?: string,
@@ -346,35 +353,22 @@ export function useSupabaseAuth() {
     const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
 
-    // skipBrowserRedirect so we can copy the code_verifier to a cookie BEFORE
-    // the browser navigates away to Google. HTTP cookies with SameSite=Lax
-    // survive cross-origin OAuth redirects in all browsers including Brave,
-    // even when localStorage/sessionStorage gets partitioned.
-    const { data, error } = await supabase.auth.signInWithOAuth({
+    // Let Supabase handle the redirect natively. createBrowserClient (@supabase/ssr)
+    // stores the PKCE code_verifier in a SameSite=Lax cookie before the browser
+    // navigates to Google, so the /auth/callback server route can read it.
+    const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: {
         redirectTo: `${siteUrl}/auth/callback${nextParam}`,
-        skipBrowserRedirect: true,
       },
     });
 
-    if (error || !data?.url) {
+    if (error) {
       setIsLoading(false);
-      return { success: false as const, error: toFriendlyError(error?.message ?? "OAuth failed") };
+      return { success: false as const, error: toFriendlyError(error.message ?? "OAuth failed") };
     }
 
-    // Copy verifier from localStorage to a cookie so server callback can read it
-    try {
-      const projectRef  = (process.env.NEXT_PUBLIC_SUPABASE_URL ?? "").split("//")[1]?.split(".")[0] ?? "";
-      const verifierKey = `sb-${projectRef}-auth-token-code-verifier`;
-      const verifier    = localStorage.getItem(verifierKey);
-      if (verifier) {
-        document.cookie = `pkce_verifier=${encodeURIComponent(verifier)}; path=/; SameSite=Lax; Secure`;
-      }
-    } catch { /* non-critical */ }
-
-    setIsLoading(false);
-    window.location.href = data.url;
+    // Browser is now navigating to Google — keep isLoading true until page leaves.
     return { success: true as const };
   }, []);
 
