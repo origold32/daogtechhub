@@ -6,7 +6,8 @@
 // GoTrue instances overwrite the PKCE cookie. This ensures a single, consistent
 // client instance across the app, avoiding stale PKCE code_verifier issues.
 
-import { createBrowserClient, type SupabaseClient } from "@supabase/ssr";
+import { createBrowserClient } from "@supabase/ssr";
+import type { SupabaseClient } from "@supabase/supabase-js";
 import type { Database } from "@/types/database";
 
 let supabase: SupabaseClient<Database> | undefined;
