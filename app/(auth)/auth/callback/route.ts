@@ -65,7 +65,8 @@ export async function GET(request: NextRequest) {
     const clearPkceCookies = (response: NextResponse) => {
       for (const cookie of request.cookies.getAll()) {
         if (cookie.name.endsWith("-code-verifier")) {
-          response.cookies.delete(cookie.name, { path: "/" });
+          // Next.js response.cookies.delete() takes only the cookie name.
+          response.cookies.delete(cookie.name);
         }
       }
     };
