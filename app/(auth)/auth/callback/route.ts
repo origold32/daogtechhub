@@ -61,18 +61,29 @@ export async function GET(request: NextRequest) {
 
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
+
+    const clearPkceCookies = (response: NextResponse) => {
+      for (const cookie of request.cookies.getAll()) {
+        if (cookie.name.endsWith("-code-verifier")) {
+          response.cookies.delete(cookie.name, { path: "/" });
+        }
+      }
+    };
+
     if (message.includes("code challenge") && message.includes("code verifier")) {
-      console.warn("[/auth/callback] PKCE mismatch: clearing any potentially stale verifier cookie and forcing new login");
-      // best effort: instruct client to re-auth with a fresh flow, and in some cases
-      // remove stale cookies by redirecting to /auth with reset indicator.
-      return NextResponse.redirect(
+      console.warn("[/auth/callback] PKCE mismatch: clearing stale code verifier cookie and forcing fresh login");
+      const errResponse = NextResponse.redirect(
         `${origin}/auth?error=${encodeURIComponent("OAuth failed due to stale PKCE code_verifier. Clear cookies and try again.")}`
       );
+      clearPkceCookies(errResponse);
+      return errResponse;
     }
 
-    return NextResponse.redirect(
+    const errResponse = NextResponse.redirect(
       `${origin}/auth?error=${encodeURIComponent(message)}`
     );
+    clearPkceCookies(errResponse);
+    return errResponse;
   }
 
   response.headers.set("Cache-Control", "private, no-store");
