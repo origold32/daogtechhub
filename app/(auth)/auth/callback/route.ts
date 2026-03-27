@@ -62,11 +62,11 @@ export async function GET(request: NextRequest) {
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
 
+    // PKCE FIX: On code challenge/verifier mismatch, delete stale cookies and redirect to retry
     const clearPkceCookies = (response: NextResponse) => {
       for (const cookie of request.cookies.getAll()) {
         if (cookie.name.endsWith("-code-verifier")) {
-          // Next.js response.cookies.delete() takes only the cookie name.
-          response.cookies.delete(cookie.name);
+          response.cookies.delete(cookie.name); // Next.js deletes by name only
         }
       }
     };
