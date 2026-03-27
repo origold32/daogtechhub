@@ -350,7 +350,8 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
 
-    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+  const siteUrl = rawSiteUrl.replace(/\/+$/, ""); // remove trailing slash(s)
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
 
     // Let Supabase handle the redirect natively. createBrowserClient (@supabase/ssr)

@@ -38,7 +38,7 @@ export async function GET(request: NextRequest) {
 
   const redirectPath = next.startsWith("/") ? next : "/profile";
   const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
-  let   response     = NextResponse.redirect(successUrl);
+  let response = NextResponse.redirect(successUrl);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -47,11 +47,9 @@ export async function GET(request: NextRequest) {
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.redirect(successUrl);
-          cookiesToSet.forEach(({ name, value, options }) =>
-            response.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            response.cookies.set(name, value, options);
+          });
         },
       },
     }
@@ -62,8 +60,18 @@ export async function GET(request: NextRequest) {
   console.log("[/auth/callback] exchangeCodeForSession success:", !!data?.user, "error:", error?.message ?? "none");
 
   if (error || !data.user) {
+    const message = error?.message ?? "Sign-in failed.";
+    if (message.includes("code challenge") && message.includes("code verifier")) {
+      console.warn("[/auth/callback] PKCE mismatch: clearing any potentially stale verifier cookie and forcing new login");
+      // best effort: instruct client to re-auth with a fresh flow, and in some cases
+      // remove stale cookies by redirecting to /auth with reset indicator.
+      return NextResponse.redirect(
+        `${origin}/auth?error=${encodeURIComponent("OAuth failed due to stale PKCE code_verifier. Clear cookies and try again.")}`
+      );
+    }
+
     return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(error?.message ?? "Sign-in failed.")}`
+      `${origin}/auth?error=${encodeURIComponent(message)}`
     );
   }
 

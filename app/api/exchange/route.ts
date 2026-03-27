@@ -25,7 +25,9 @@ export async function GET(request: NextRequest) {
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
     cookies: {
       getAll: () => request.cookies.getAll(),
-      setAll: (cookies) => cookies.forEach(c => cookiesToWrite.push(c)),
+      setAll: (cookies) => {
+        cookies.forEach(c => cookiesToWrite.push(c));
+      },
     },
   });
 
