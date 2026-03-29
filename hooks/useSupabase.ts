@@ -351,12 +351,7 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
 
-<<<<<<< HEAD
-    const siteUrl   = window.location.origin;
-=======
-const rawSiteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
-  const siteUrl = rawSiteUrl.replace(/\/+$/, ""); // remove trailing slash(s)
->>>>>>> 2de6c6e723f445f4bdc88963590271f99a4e3a1b
+    const siteUrl = window.location.origin;
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
 
     clearSupabasePkceCookiesInBrowser();

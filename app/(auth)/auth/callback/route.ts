@@ -77,37 +77,14 @@ export async function GET(request: NextRequest) {
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
   if (error || !data.user) {
-<<<<<<< HEAD
-    const errorUrl = new URL(authUrl);
-    errorUrl.searchParams.set("error", error?.message ?? "Sign-in failed.");
-    return redirectWithClearedPkce(request, errorUrl.toString());
-=======
     const message = error?.message ?? "Sign-in failed.";
-
-    // PKCE FIX: On code challenge/verifier mismatch, delete stale cookies and redirect to retry
-    const clearPkceCookies = (response: NextResponse) => {
-      for (const cookie of request.cookies.getAll()) {
-        if (cookie.name.endsWith("-code-verifier")) {
-          response.cookies.delete(cookie.name); // Next.js deletes by name only
-        }
-      }
-    };
-
+    const errorUrl = new URL(authUrl);
     if (message.includes("code challenge") && message.includes("code verifier")) {
-      console.warn("[/auth/callback] PKCE mismatch: clearing stale code verifier cookie and forcing fresh login");
-      const errResponse = NextResponse.redirect(
-        `${origin}/auth?error=${encodeURIComponent("OAuth failed due to stale PKCE code_verifier. Clear cookies and try again.")}`
-      );
-      clearPkceCookies(errResponse);
-      return errResponse;
+      errorUrl.searchParams.set("error", "OAuth failed due to stale PKCE state. Please try Google again.");
+      return redirectWithClearedPkce(request, errorUrl.toString());
     }
-
-    const errResponse = NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(message)}`
-    );
-    clearPkceCookies(errResponse);
-    return errResponse;
->>>>>>> 2de6c6e723f445f4bdc88963590271f99a4e3a1b
+    errorUrl.searchParams.set("error", message);
+    return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
   response.headers.set("Cache-Control", "private, no-store");
