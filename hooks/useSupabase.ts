@@ -331,10 +331,25 @@ export function useSupabaseAuth() {
       );
     }
 
-    const params = new URLSearchParams({ provider });
-    if (redirectPath) params.set("next", redirectPath);
-    params.set("refresh", Date.now().toString());
-    window.location.replace(`/auth/oauth/start?${params.toString()}`);
+    const supabase = getClient();
+    if (!supabase) {
+      setIsLoading(false);
+      return { success: false as const, error: "Supabase not configured - check your .env.local file." };
+    }
+
+    const siteUrl = window.location.origin;
+    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
+    const { error } = await supabase.auth.signInWithOAuth({
+      provider,
+      options: {
+        redirectTo: `${siteUrl}/auth/callback${nextParam}`,
+      },
+    });
+
+    if (error) {
+      setIsLoading(false);
+      return { success: false as const, error: toFriendlyError(error.message ?? "OAuth failed") };
+    }
 
     return { success: true as const };
   }, []);
