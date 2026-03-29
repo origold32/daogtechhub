@@ -9,9 +9,6 @@ import {
   getLegacySupabaseCookieOptions,
   isPkceMismatchError,
   listSupabasePkceCookieNames,
-  OAUTH_PROVIDER_COOKIE_NAME,
-  OAUTH_REDIRECT_COOKIE_NAME,
-  OAUTH_RETRY_COOKIE_NAME,
   resolveRequestOrigin,
   sanitizeRedirectPath,
   SUPABASE_AUTH_COOKIE_OPTIONS,
@@ -38,17 +35,6 @@ function redirectWithClearedPkce(request: NextRequest, url: string) {
 
   return response;
 }
-
-function clearOAuthHelperCookies(response: NextResponse) {
-  [OAUTH_PROVIDER_COOKIE_NAME, OAUTH_REDIRECT_COOKIE_NAME, OAUTH_RETRY_COOKIE_NAME].forEach((name) => {
-    response.cookies.set(name, "", {
-      path: "/",
-      expires: new Date(0),
-      maxAge: 0,
-    });
-  });
-}
-
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
@@ -72,7 +58,7 @@ export async function GET(request: NextRequest) {
     return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
-  const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
+  const successUrl = new URL(redirectPath, origin).toString();
   let response = NextResponse.redirect(successUrl);
 
   const supabase = createServerClient(
@@ -130,38 +116,17 @@ export async function GET(request: NextRequest) {
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
     if (isPkceMismatchError(message)) {
-      const provider = request.cookies.get(OAUTH_PROVIDER_COOKIE_NAME)?.value;
-      const retryValue = request.cookies.get(OAUTH_RETRY_COOKIE_NAME)?.value;
-
-      if ((provider === "google" || provider === "facebook") && retryValue !== "1") {
-        const retryUrl = new URL("/auth", origin);
-        retryUrl.searchParams.set("redirectTo", redirectPath);
-        retryUrl.searchParams.set("oauthRetry", provider);
-        const retryResponse = redirectWithClearedPkce(request, retryUrl.toString());
-        retryResponse.cookies.set(OAUTH_RETRY_COOKIE_NAME, "1", {
-          path: "/",
-          sameSite: "lax",
-          maxAge: 600,
-        });
-        return retryResponse;
-      }
-
       const errorUrl = new URL(authUrl);
       errorUrl.searchParams.set("error", "OAuth failed due to stale PKCE state. Please try Google again.");
-      const errorResponse = redirectWithClearedPkce(request, errorUrl.toString());
-      clearOAuthHelperCookies(errorResponse);
-      return errorResponse;
+      return redirectWithClearedPkce(request, errorUrl.toString());
     }
 
     const errorUrl = new URL(authUrl);
     errorUrl.searchParams.set("error", message);
-    const errorResponse = redirectWithClearedPkce(request, errorUrl.toString());
-    clearOAuthHelperCookies(errorResponse);
-    return errorResponse;
+    return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
   response.headers.set("Cache-Control", "private, no-store");
-  clearOAuthHelperCookies(response);
   upsertProfile(data.user).catch(() => {});
   return response;
 }
