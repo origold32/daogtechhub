@@ -15,14 +15,13 @@ function AuthCodeRedirect() {
     const code  = searchParams.get("code");
     const error = searchParams.get("error");
     const tokenHash = searchParams.get("token_hash");
-    const type  = searchParams.get("type");
+    const query = searchParams.toString();
     if (tokenHash) {
-      const q = new URLSearchParams({ token_hash: tokenHash, ...(type ? { type } : {}) });
-      router.replace(`/auth/callback?${q}`);
+      router.replace(`/auth/confirm?${query}`);
     } else if (code) {
-      router.replace(`/auth/callback?code=${code}`);
+      router.replace(`/auth/callback?${query}`);
     } else if (error) {
-      router.replace(`/auth?error=${encodeURIComponent(error)}`);
+      router.replace(`/auth?${query}`);
     }
   }, [searchParams, router]);
   return null;

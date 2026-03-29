@@ -4,39 +4,58 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import {
+  buildRedirectUrl,
+  listSupabasePkceCookieNames,
+  resolveRequestOrigin,
+  sanitizeRedirectPath,
+} from "@/lib/auth-utils";
+
+function redirectWithClearedPkce(request: NextRequest, url: string) {
+  const response = NextResponse.redirect(url);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+
+  if (!supabaseUrl) return response;
+
+  const pkceCookieNames = listSupabasePkceCookieNames(
+    request.cookies.getAll().map(({ name }) => name),
+    supabaseUrl,
+  );
+
+  pkceCookieNames.forEach((name) => {
+    response.cookies.set(name, "", {
+      path: "/",
+      expires: new Date(0),
+      maxAge: 0,
+    });
+  });
+
+  return response;
+}
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
 
   const code       = searchParams.get("code");
-  const next       = searchParams.get("next") ?? "/profile";
+  const next       = searchParams.get("next");
   const errorParam = searchParams.get("error");
   const errorDesc  = searchParams.get("error_description");
-
-  // x-forwarded-host gives the real public domain on Vercel
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const origin = forwardedHost && process.env.NODE_ENV !== "development"
-    ? `https://${forwardedHost}`
-    : new URL(request.url).origin;
-
-  // Temporary debug logging — remove after auth confirmed working
-  console.log("[/auth/callback] incoming URL:", request.url);
-  console.log("[/auth/callback] code present:", !!code);
-  console.log("[/auth/callback] origin resolved:", origin);
+  const origin = resolveRequestOrigin(request.url, request.headers);
+  const redirectPath = sanitizeRedirectPath(next);
+  const authUrl = buildRedirectUrl(origin, "/auth", "redirectTo", redirectPath);
 
   if (errorParam) {
-    console.error("[/auth/callback] provider error:", errorParam, errorDesc);
-    return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(errorDesc ?? errorParam)}`
-    );
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", errorDesc ?? errorParam);
+    return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
   if (!code) {
-    console.error("[/auth/callback] no code — redirecting to auth");
-    return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent("Missing auth code.")}`);
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", "Missing auth code.");
+    return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
-  const redirectPath = next.startsWith("/") ? next : "/profile";
   const successUrl   = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
   let   response     = NextResponse.redirect(successUrl);
 
@@ -59,12 +78,10 @@ export async function GET(request: NextRequest) {
 
   const { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  console.log("[/auth/callback] exchangeCodeForSession success:", !!data?.user, "error:", error?.message ?? "none");
-
   if (error || !data.user) {
-    return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(error?.message ?? "Sign-in failed.")}`
-    );
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", error?.message ?? "Sign-in failed.");
+    return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
   response.headers.set("Cache-Control", "private, no-store");

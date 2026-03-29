@@ -3,6 +3,7 @@
 // PUT   → Updates password from the reset token (called on the reset page)
 
 import { NextRequest } from "next/server";
+import { buildRedirectUrl, resolveRequestOrigin } from "@/lib/auth-utils";
 import { createServerSupabaseClient } from "@/supabase/server";
 import { ok, badRequest, serverError } from "@/lib/api-response";
 
@@ -13,11 +14,17 @@ export async function POST(req: NextRequest) {
     if (!email?.trim()) return badRequest("Email is required");
 
     const supabase  = await createServerSupabaseClient();
-    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3232";
+    const origin    = resolveRequestOrigin(req.url, req.headers);
+    const redirectTo = buildRedirectUrl(
+      origin,
+      "/auth/confirm",
+      "next",
+      "/reset-password?type=recovery",
+    );
 
     const { error } = await supabase.auth.resetPasswordForEmail(
       email.toLowerCase().trim(),
-      { redirectTo: `${siteUrl}/auth/callback?next=/reset-password` }
+      { redirectTo }
     );
 
     // Always return success — never reveal whether email exists (security)

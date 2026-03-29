@@ -1,8 +1,9 @@
 // app/api/auth/register/route.ts
 // POST  → Creates a new user account with email + password
-// Supabase sends a confirmation email; user clicks to verify then lands on /auth/callback
+// Supabase sends a confirmation email; user clicks to verify via /auth/confirm.
 
 import { NextRequest } from "next/server";
+import { buildRedirectUrl, resolveRequestOrigin } from "@/lib/auth-utils";
 import { createServiceRoleClient } from "@/supabase/server";
 import { ok, badRequest, serverError } from "@/lib/api-response";
 
@@ -35,13 +36,14 @@ export async function POST(req: NextRequest) {
     const { createServerSupabaseClient } = await import("@/supabase/server");
     const supabase = await createServerSupabaseClient();
 
-    const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3232";
+    const origin = resolveRequestOrigin(req.url, req.headers);
+    const emailRedirectTo = buildRedirectUrl(origin, "/auth/confirm", "next", "/profile");
 
     const { data, error } = await supabase.auth.signUp({
       email: email.toLowerCase().trim(),
       password,
       options: {
-        emailRedirectTo: `${siteUrl}/auth/callback`,
+        emailRedirectTo,
         data: {
           first_name: firstName.trim(),
           last_name:  lastName.trim(),

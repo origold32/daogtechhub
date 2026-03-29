@@ -4,32 +4,36 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import {
+  buildRedirectUrl,
+  resolveRequestOrigin,
+  sanitizeRedirectPath,
+} from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
-  const { searchParams, origin } = new URL(request.url);
+  const { searchParams } = new URL(request.url);
 
   const tokenHash  = searchParams.get("token_hash");
   const type       = (searchParams.get("type") ?? "email") as "email" | "signup" | "magiclink" | "recovery";
-  const next       = searchParams.get("next") ?? "/profile";
+  const next       = searchParams.get("next");
   const errorParam = searchParams.get("error");
+  const origin     = resolveRequestOrigin(request.url, request.headers);
+  const redirectPath = sanitizeRedirectPath(next);
+  const successUrl = `${origin}/auth/verifying?next=${encodeURIComponent(redirectPath)}`;
+  const authUrl = buildRedirectUrl(origin, "/auth", "redirectTo", redirectPath);
 
   if (errorParam) {
-    return NextResponse.redirect(
-      `${origin}/auth?error=${encodeURIComponent(searchParams.get("error_description") ?? errorParam)}`
-    );
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", searchParams.get("error_description") ?? errorParam);
+    return NextResponse.redirect(errorUrl);
   }
 
   if (!tokenHash) {
-    return NextResponse.redirect(`${origin}/auth?error=${encodeURIComponent("Invalid sign-in link.")}`);
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", "Invalid sign-in link.");
+    return NextResponse.redirect(errorUrl);
   }
-
-  const forwardedHost = request.headers.get("x-forwarded-host");
-  const host = forwardedHost && process.env.NODE_ENV !== "development"
-    ? `https://${forwardedHost}`
-    : origin;
-
-  const redirectPath = next.startsWith("/") ? next : "/profile";
-  let   response     = NextResponse.redirect(`${host}${redirectPath}`);
+  let response = NextResponse.redirect(successUrl);
 
   const supabase = createServerClient(
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,7 +43,7 @@ export async function GET(request: NextRequest) {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
-          response = NextResponse.redirect(`${host}${redirectPath}`);
+          response = NextResponse.redirect(successUrl);
           cookiesToSet.forEach(({ name, value, options }) =>
             response.cookies.set(name, value, options)
           );
@@ -51,9 +55,9 @@ export async function GET(request: NextRequest) {
   const { error } = await supabase.auth.verifyOtp({ token_hash: tokenHash, type });
 
   if (error) {
-    return NextResponse.redirect(
-      `${host}/auth?error=${encodeURIComponent("Sign-in link expired. Please request a new one.")}`
-    );
+    const errorUrl = new URL(authUrl);
+    errorUrl.searchParams.set("error", "Sign-in link expired. Please request a new one.");
+    return NextResponse.redirect(errorUrl);
   }
 
   response.headers.set("Cache-Control", "private, no-store");

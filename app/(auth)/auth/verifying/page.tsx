@@ -19,6 +19,7 @@ function VerifyingContent() {
   const params = useSearchParams();
   const next   = params.get("next") ?? "/profile";
   const code   = params.get("code"); // should NEVER be here
+  const tokenHash = params.get("token_hash");
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -48,7 +49,7 @@ function VerifyingContent() {
 
     // If code/token_hash are present, the above effect handles it.
     // Don't start session polling in that case.
-    if (code) return;
+    if (code || tokenHash) return;
 
     // Normal path: session already established by /auth/callback or /auth/confirm.
     // Poll until cookies are readable by the browser client.
@@ -70,7 +71,7 @@ function VerifyingContent() {
 
     checkSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [code, tokenHash, redirectPath, router]);
 
   useEffect(() => {
     if (uiState !== "verifying") return;

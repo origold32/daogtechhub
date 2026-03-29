@@ -2,6 +2,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, useRef } from "react";
+import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
@@ -350,8 +351,10 @@ export function useSupabaseAuth() {
     if (!supabase) return { success: false as const, error: "Supabase not configured — check .env.local" };
     setIsLoading(true);
 
-    const siteUrl   = process.env.NEXT_PUBLIC_SITE_URL ?? window.location.origin;
+    const siteUrl   = window.location.origin;
     const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
+
+    clearSupabasePkceCookiesInBrowser();
 
     // Let Supabase handle the redirect natively. createBrowserClient (@supabase/ssr)
     // stores the PKCE code_verifier in a SameSite=Lax cookie before the browser

@@ -33,10 +33,12 @@ function ErrorBanner({ message }: { message: string }) {
 function AuthForm() {
   const router  = useRouter();
   const params  = useSearchParams();
-  const { sendOtp, verifyOtp, signInWithOAuth, isLoading } = useSupabaseAuth();
+  const { sendOtp, verifyOtp, signInWithOAuth } = useSupabaseAuth();
   const { user, isAuthenticated, isHydrating } = useAuthStore();
 
+  const mode = params.get("mode") === "signup" ? "signup" : "signin";
   const redirectTo = params.get("redirectTo") ?? "/profile";
+  const isSignupMode = mode === "signup";
 
   const [step,       setStep]       = useState<Step>("email");
   const [email,      setEmail]      = useState("");
@@ -55,7 +57,7 @@ function AuthForm() {
 
   // Show ?error= from callback redirects
   useEffect(() => {
-    const err = params.get("error");
+    const err = params.get("error") ?? params.get("error_description");
     if (err) setFormError(toFriendlyError(decodeURIComponent(err).replace(/_/g, " ")));
   }, [params]);
 
@@ -143,8 +145,10 @@ function AuthForm() {
     setFormError(null);
     setOauthBusy(true);
     const r = await signInWithOAuth("google", redirectTo);
-    setOauthBusy(false);
-    if (!r.success) setFormError(r.error ?? "Google sign-in failed.");
+    if (!r.success) {
+      setOauthBusy(false);
+      setFormError(r.error ?? "Google sign-in failed.");
+    }
   }
 
   // ── Hydrating ──────────────────────────────────────────────────────────────
@@ -288,9 +292,13 @@ function AuthForm() {
     >
       <div className="flex flex-col items-center text-center space-y-1">
         <AppLogo width={52} height={52} />
-        <h1 className="text-soft-white font-bold text-2xl mt-2">Sign in to DAOG</h1>
+        <h1 className="text-soft-white font-bold text-2xl mt-2">
+          {isSignupMode ? "Create your DAOG account" : "Sign in to DAOG"}
+        </h1>
         <p className="text-muted-lavender text-sm">
-          Enter your email — we&apos;ll send a code. No password needed.
+          {isSignupMode
+            ? "Use your email or Google to get started. New accounts are created automatically."
+            : "Enter your email — we&apos;ll send a code. No password needed."}
         </p>
       </div>
 
@@ -318,7 +326,7 @@ function AuthForm() {
         >
           {submitting
             ? <><Loader2 size={15} className="animate-spin" />Sending code…</>
-            : "Send sign-in code"
+            : isSignupMode ? "Send sign-up code" : "Send sign-in code"
           }
         </button>
       </form>

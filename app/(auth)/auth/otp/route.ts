@@ -4,6 +4,7 @@ export const dynamic = "force-dynamic";
 // User enters the code manually — clean, reliable, works in all email clients.
 
 import { NextRequest, NextResponse } from "next/server";
+import { buildRedirectUrl, resolveRequestOrigin, sanitizeRedirectPath } from "@/lib/auth-utils";
 import { authLimiter, getClientIp } from "@/lib/rate-limit";
 
 function isValidEmail(v: string) {
@@ -29,7 +30,7 @@ export async function POST(req: NextRequest) {
   try { body = await req.json(); }
   catch { return NextResponse.json({ success: false, error: "Invalid request." }, { status: 400 }); }
 
-  const { identifier, type, firstName, lastName } = body;
+  const { identifier, type, firstName, lastName, redirectTo } = body;
 
   if (!identifier?.trim() || !type) {
     return NextResponse.json({ success: false, error: "Email or phone number is required." }, { status: 400 });
@@ -66,14 +67,20 @@ export async function POST(req: NextRequest) {
       // emailRedirectTo enables BOTH:
       //   1. A 6-digit OTP code the user can enter manually
       //   2. A magic link button in the email that signs them in directly
-      // Both go through /auth/verifying which handles token_hash (magic link) and
-      // manual OTP entry (via verifyOtp on the auth page).
-      const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://daogtechhub.vercel.app";
+      // Magic-link clicks go through /auth/confirm, while manual OTP entry stays
+      // on the auth page and uses verifyOtp directly.
+      const origin = resolveRequestOrigin(req.url, req.headers);
+      const emailRedirectTo = buildRedirectUrl(
+        origin,
+        "/auth/confirm",
+        "next",
+        sanitizeRedirectPath(redirectTo),
+      );
       result = await supabase.auth.signInWithOtp({
         email: identifier.trim().toLowerCase(),
         options: {
           shouldCreateUser: true,
-          emailRedirectTo: `${siteUrl}/auth/verifying`,
+          emailRedirectTo,
           data: { source: "email_otp", ...userMetadata },
         },
       });
