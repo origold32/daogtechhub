@@ -41,20 +41,26 @@ export async function GET(request: NextRequest) {
 
   const code       = searchParams.get("code");
   const next       = searchParams.get("next");
+  const provider   = searchParams.get("provider");
   const errorParam = searchParams.get("error");
   const errorDesc  = searchParams.get("error_description");
   const origin = resolveRequestOrigin(request.url, request.headers);
   const redirectPath = sanitizeRedirectPath(next);
   const authUrl = buildRedirectUrl(origin, "/auth", "redirectTo", redirectPath);
+  const authRedirectUrl = new URL(authUrl);
+
+  if (provider) {
+    authRedirectUrl.searchParams.set("oauthProvider", provider);
+  }
 
   if (errorParam) {
-    const errorUrl = new URL(authUrl);
+    const errorUrl = new URL(authRedirectUrl.toString());
     errorUrl.searchParams.set("error", errorDesc ?? errorParam);
     return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
   if (!code) {
-    const errorUrl = new URL(authUrl);
+    const errorUrl = new URL(authRedirectUrl.toString());
     errorUrl.searchParams.set("error", "Missing auth code.");
     return redirectWithClearedPkce(request, errorUrl.toString());
   }
@@ -152,12 +158,13 @@ export async function GET(request: NextRequest) {
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
     if (isPkceMismatchError(message)) {
-      const errorUrl = new URL(authUrl);
-      errorUrl.searchParams.set("error", "OAuth failed due to stale PKCE state. Please try Google again.");
+      const providerLabel = provider === "facebook" ? "Facebook" : "Google";
+      const errorUrl = new URL(authRedirectUrl.toString());
+      errorUrl.searchParams.set("error", `OAuth failed due to stale PKCE state. Please try ${providerLabel} again.`);
       return redirectWithClearedPkce(request, errorUrl.toString());
     }
 
-    const errorUrl = new URL(authUrl);
+    const errorUrl = new URL(authRedirectUrl.toString());
     errorUrl.searchParams.set("error", message);
     return redirectWithClearedPkce(request, errorUrl.toString());
   }

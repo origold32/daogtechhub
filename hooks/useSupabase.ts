@@ -335,27 +335,19 @@ export function useSupabaseAuth() {
     }
 
     resetSupabaseBrowserClient();
-    const supabase = getClient();
-    if (!supabase) {
+    try {
+      const startUrl = new URL("/auth/oauth/start", window.location.origin);
+      startUrl.searchParams.set("provider", provider);
+      startUrl.searchParams.set("next", redirectPath && redirectPath !== "/" ? redirectPath : "/profile");
+      window.location.assign(startUrl.toString());
+      return { success: true as const };
+    } catch (error) {
       setIsLoading(false);
-      return { success: false as const, error: "Supabase not configured - check your .env.local file." };
+      return {
+        success: false as const,
+        error: toFriendlyError((error as Error).message ?? "OAuth failed"),
+      };
     }
-
-    const siteUrl = window.location.origin;
-    const nextParam = redirectPath && redirectPath !== "/" ? `?next=${encodeURIComponent(redirectPath)}` : "";
-    const { error } = await supabase.auth.signInWithOAuth({
-      provider,
-      options: {
-        redirectTo: `${siteUrl}/auth/callback${nextParam}`,
-      },
-    });
-
-    if (error) {
-      setIsLoading(false);
-      return { success: false as const, error: toFriendlyError(error.message ?? "OAuth failed") };
-    }
-
-    return { success: true as const };
   }, []);
 
   const signInWithPassword = useCallback(async (email: string, password: string) => {

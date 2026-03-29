@@ -51,11 +51,12 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  const callbackUrl = buildRedirectUrl(origin, "/auth/callback", "next", redirectPath);
+  const callbackUrl = new URL(buildRedirectUrl(origin, "/auth/callback", "next", redirectPath));
+  callbackUrl.searchParams.set("provider", provider);
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider,
     options: {
-      redirectTo: callbackUrl,
+      redirectTo: callbackUrl.toString(),
       skipBrowserRedirect: true,
     },
   });
