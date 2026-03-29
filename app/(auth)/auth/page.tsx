@@ -12,6 +12,7 @@ import { FaGoogle } from "react-icons/fa";
 import AppLogo from "@/components/reusables/app-logo";
 import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { useSupabaseAuth, toFriendlyError } from "@/hooks/useSupabase";
+import { resetSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
@@ -68,6 +69,7 @@ function AuthForm() {
     if (!normalized.includes("pkce")) return;
 
     clearSupabasePkceCookiesInBrowser();
+    resetSupabaseBrowserClient();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations()

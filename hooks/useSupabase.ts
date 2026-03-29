@@ -2,7 +2,10 @@
 
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
-import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
+import {
+  getSupabaseBrowserClient as _getClient,
+  resetSupabaseBrowserClient,
+} from "@/lib/supabaseClient";
 import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
@@ -331,6 +334,7 @@ export function useSupabaseAuth() {
       );
     }
 
+    resetSupabaseBrowserClient();
     const supabase = getClient();
     if (!supabase) {
       setIsLoading(false);

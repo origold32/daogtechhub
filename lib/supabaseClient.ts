@@ -25,3 +25,7 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> {
   }
   return supabase;
 }
+
+export function resetSupabaseBrowserClient() {
+  supabase = undefined;
+}
