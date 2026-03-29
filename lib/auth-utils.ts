@@ -1,10 +1,23 @@
 const DEFAULT_AUTH_REDIRECT_PATH = "/profile";
 export const SUPABASE_AUTH_COOKIE_NAME = "daogtechhub-auth";
+export const OAUTH_PROVIDER_COOKIE_NAME = "daogtechhub-oauth-provider";
+export const OAUTH_REDIRECT_COOKIE_NAME = "daogtechhub-oauth-next";
+export const OAUTH_RETRY_COOKIE_NAME = "daogtechhub-oauth-retry";
 export const SUPABASE_AUTH_COOKIE_OPTIONS = {
   name: SUPABASE_AUTH_COOKIE_NAME,
   path: "/",
   sameSite: "lax" as const,
 };
+
+export function setBrowserCookie(name: string, value: string, maxAgeSeconds = 600) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=${encodeURIComponent(value)}; Max-Age=${maxAgeSeconds}; path=/; SameSite=Lax`;
+}
+
+export function clearBrowserCookie(name: string) {
+  if (typeof document === "undefined") return;
+  document.cookie = `${name}=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+}
 
 function readForwardedValue(value: string | null) {
   return value?.split(",")[0]?.trim() || null;

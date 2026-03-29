@@ -9,6 +9,9 @@ import {
   getLegacySupabaseCookieOptions,
   isPkceMismatchError,
   listSupabasePkceCookieNames,
+  OAUTH_PROVIDER_COOKIE_NAME,
+  OAUTH_REDIRECT_COOKIE_NAME,
+  OAUTH_RETRY_COOKIE_NAME,
   resolveRequestOrigin,
   sanitizeRedirectPath,
   SUPABASE_AUTH_COOKIE_OPTIONS,
@@ -34,6 +37,16 @@ function redirectWithClearedPkce(request: NextRequest, url: string) {
   });
 
   return response;
+}
+
+function clearOAuthHelperCookies(response: NextResponse) {
+  [OAUTH_PROVIDER_COOKIE_NAME, OAUTH_REDIRECT_COOKIE_NAME, OAUTH_RETRY_COOKIE_NAME].forEach((name) => {
+    response.cookies.set(name, "", {
+      path: "/",
+      expires: new Date(0),
+      maxAge: 0,
+    });
+  });
 }
 
 export async function GET(request: NextRequest) {
@@ -116,16 +129,39 @@ export async function GET(request: NextRequest) {
 
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
-    const errorUrl = new URL(authUrl);
     if (isPkceMismatchError(message)) {
+      const provider = request.cookies.get(OAUTH_PROVIDER_COOKIE_NAME)?.value;
+      const retryValue = request.cookies.get(OAUTH_RETRY_COOKIE_NAME)?.value;
+
+      if ((provider === "google" || provider === "facebook") && retryValue !== "1") {
+        const retryUrl = new URL("/auth", origin);
+        retryUrl.searchParams.set("redirectTo", redirectPath);
+        retryUrl.searchParams.set("oauthRetry", provider);
+        const retryResponse = redirectWithClearedPkce(request, retryUrl.toString());
+        retryResponse.cookies.set(OAUTH_RETRY_COOKIE_NAME, "1", {
+          path: "/",
+          sameSite: "lax",
+          maxAge: 600,
+        });
+        return retryResponse;
+      }
+
+      const errorUrl = new URL(authUrl);
       errorUrl.searchParams.set("error", "OAuth failed due to stale PKCE state. Please try Google again.");
-      return redirectWithClearedPkce(request, errorUrl.toString());
+      const errorResponse = redirectWithClearedPkce(request, errorUrl.toString());
+      clearOAuthHelperCookies(errorResponse);
+      return errorResponse;
     }
+
+    const errorUrl = new URL(authUrl);
     errorUrl.searchParams.set("error", message);
-    return redirectWithClearedPkce(request, errorUrl.toString());
+    const errorResponse = redirectWithClearedPkce(request, errorUrl.toString());
+    clearOAuthHelperCookies(errorResponse);
+    return errorResponse;
   }
 
   response.headers.set("Cache-Control", "private, no-store");
+  clearOAuthHelperCookies(response);
   upsertProfile(data.user).catch(() => {});
   return response;
 }

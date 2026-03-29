@@ -3,7 +3,14 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import { getSupabaseBrowserClient as _getClient } from "@/lib/supabaseClient";
-import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
+import {
+  clearBrowserCookie,
+  clearSupabasePkceCookiesInBrowser,
+  OAUTH_PROVIDER_COOKIE_NAME,
+  OAUTH_REDIRECT_COOKIE_NAME,
+  OAUTH_RETRY_COOKIE_NAME,
+  setBrowserCookie,
+} from "@/lib/auth-utils";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
@@ -316,6 +323,9 @@ export function useSupabaseAuth() {
 
     setIsLoading(true);
     clearSupabasePkceCookiesInBrowser();
+    setBrowserCookie(OAUTH_PROVIDER_COOKIE_NAME, provider);
+    setBrowserCookie(OAUTH_REDIRECT_COOKIE_NAME, redirectPath ?? "/profile");
+    clearBrowserCookie(OAUTH_RETRY_COOKIE_NAME);
 
     if ("serviceWorker" in navigator) {
       const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);

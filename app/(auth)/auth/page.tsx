@@ -14,7 +14,13 @@ import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { useSupabaseAuth, toFriendlyError } from "@/hooks/useSupabase";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
-import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
+import {
+  clearBrowserCookie,
+  clearSupabasePkceCookiesInBrowser,
+  OAUTH_PROVIDER_COOKIE_NAME,
+  OAUTH_REDIRECT_COOKIE_NAME,
+  OAUTH_RETRY_COOKIE_NAME,
+} from "@/lib/auth-utils";
 import CustomCountDown from "@/components/reusables/countdown-custom";
 
 type Step = "email" | "otp" | "waiting" | "success";
@@ -55,6 +61,7 @@ function AuthForm() {
 
   const verifyingRef = useRef(false);
   const didRedirect  = useRef(false);
+  const didAutoRetry = useRef(false);
 
   // Show ?error= from callback redirects
   useEffect(() => {
@@ -85,6 +92,29 @@ function AuthForm() {
         .catch(() => {});
     }
   }, [params]);
+
+  useEffect(() => {
+    const retryProvider = params.get("oauthRetry");
+    if (!retryProvider || didAutoRetry.current) return;
+    if (retryProvider !== "google" && retryProvider !== "facebook") return;
+
+    didAutoRetry.current = true;
+    handleGoogleRetry(retryProvider);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [params]);
+
+  async function handleGoogleRetry(provider: "google" | "facebook") {
+    setFormError(null);
+    setOauthBusy(true);
+    const r = await signInWithOAuth(provider, redirectTo);
+    if (!r.success) {
+      setOauthBusy(false);
+      setFormError(r.error ?? "Google sign-in failed.");
+      clearBrowserCookie(OAUTH_PROVIDER_COOKIE_NAME);
+      clearBrowserCookie(OAUTH_REDIRECT_COOKIE_NAME);
+      clearBrowserCookie(OAUTH_RETRY_COOKIE_NAME);
+    }
+  }
 
   // ── THE KEY FIX: watch auth store, redirect when session is confirmed ────────
   // This runs whether user came from OTP, Google OAuth, or a page reload.
