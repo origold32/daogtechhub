@@ -8,6 +8,7 @@
 
 import { createBrowserClient } from "@supabase/ssr";
 import type { SupabaseClient } from "@supabase/supabase-js";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/auth-utils";
 import type { Database } from "@/types/database";
 
 let supabase: SupabaseClient<Database> | undefined;
@@ -16,7 +17,10 @@ export function getSupabaseBrowserClient(): SupabaseClient<Database> {
   if (!supabase) {
     supabase = createBrowserClient<Database>(
       process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!
+      process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+      {
+        cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
+      },
     );
   }
   return supabase;

@@ -5,6 +5,7 @@
 import { createServerClient } from "@supabase/ssr";
 import { createClient as createSupabaseClient } from "@supabase/supabase-js";
 import { cookies } from "next/headers";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/auth-utils";
 import type { Database } from "@/types/database";
 
 export const createServerSupabaseClient = async () => {
@@ -13,6 +14,7 @@ export const createServerSupabaseClient = async () => {
   const key  = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   return createServerClient<Database>(url, key, {
+    cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll()             { return cookieStore.getAll(); },
       setAll(cookiesToSet) {

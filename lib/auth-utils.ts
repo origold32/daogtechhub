@@ -1,4 +1,10 @@
 const DEFAULT_AUTH_REDIRECT_PATH = "/profile";
+export const SUPABASE_AUTH_COOKIE_NAME = "daogtechhub-auth";
+export const SUPABASE_AUTH_COOKIE_OPTIONS = {
+  name: SUPABASE_AUTH_COOKIE_NAME,
+  path: "/",
+  sameSite: "lax" as const,
+};
 
 function readForwardedValue(value: string | null) {
   return value?.split(",")[0]?.trim() || null;
@@ -38,18 +44,28 @@ export function buildRedirectUrl(
   return url.toString();
 }
 
-export function getSupabaseStorageKey(supabaseUrl: string) {
+function getLegacySupabaseStorageKey(supabaseUrl?: string) {
+  if (!supabaseUrl) return null;
   const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
   return `sb-${projectRef}-auth-token`;
 }
 
-export function listSupabasePkceCookieNames(
-  cookieNames: string[],
-  supabaseUrl: string,
-) {
-  const prefix = `${getSupabaseStorageKey(supabaseUrl)}-code-verifier`;
+function getSupabaseStorageKeys(supabaseUrl?: string) {
+  return [
+    SUPABASE_AUTH_COOKIE_NAME,
+    getLegacySupabaseStorageKey(supabaseUrl),
+  ].filter((value): value is string => Boolean(value));
+}
+
+export function listSupabasePkceCookieNames(cookieNames: string[], supabaseUrl?: string) {
+  const prefixes = getSupabaseStorageKeys(supabaseUrl).map(
+    (storageKey) => `${storageKey}-code-verifier`,
+  );
+
   return cookieNames.filter(
-    (name) => name === prefix || name.startsWith(`${prefix}.`),
+    (name) => prefixes.some(
+      (prefix) => name === prefix || name.startsWith(`${prefix}.`),
+    ),
   );
 }
 
@@ -57,20 +73,22 @@ export function clearSupabasePkceCookiesInBrowser() {
   if (typeof document === "undefined") return;
 
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!supabaseUrl) return;
-
-  const prefix = `${getSupabaseStorageKey(supabaseUrl)}-code-verifier`;
+  const prefixes = getSupabaseStorageKeys(supabaseUrl).map(
+    (storageKey) => `${storageKey}-code-verifier`,
+  );
   const cookieNames = document.cookie
     .split(";")
     .map((part) => part.trim().split("=")[0])
-    .filter((name) => name === prefix || name.startsWith(`${prefix}.`));
+    .filter((name) => prefixes.some(
+      (prefix) => name === prefix || name.startsWith(`${prefix}.`),
+    ));
 
   cookieNames.forEach((name) => {
     document.cookie = `${name}=; Max-Age=0; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
   });
 
   try {
-    window.localStorage.removeItem(prefix);
+    prefixes.forEach((prefix) => window.localStorage.removeItem(prefix));
   } catch {
     // Cookie storage is the primary source of truth, so ignore localStorage failures.
   }

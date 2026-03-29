@@ -8,6 +8,7 @@ import {
   buildRedirectUrl,
   resolveRequestOrigin,
   sanitizeRedirectPath,
+  SUPABASE_AUTH_COOKIE_OPTIONS,
 } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
@@ -39,6 +40,7 @@ export async function GET(request: NextRequest) {
     process.env.NEXT_PUBLIC_SUPABASE_URL!,
     process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
     {
+      cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
       cookies: {
         getAll: () => request.cookies.getAll(),
         setAll: (cookiesToSet) => {

@@ -6,6 +6,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/auth-utils";
 
 export async function GET(request: NextRequest) {
   const { searchParams } = new URL(request.url);
@@ -23,6 +24,7 @@ export async function GET(request: NextRequest) {
   const cookiesToWrite: { name: string; value: string; options: Record<string, unknown> }[] = [];
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll: () => request.cookies.getAll(),
       setAll: (cookies) => {

@@ -4,6 +4,7 @@
 
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/auth-utils";
 import type { Database } from "@/types/database";
 
 const PROTECTED_PATHS   = ["/profile", "/orders", "/admin", "/wishlist", "/checkout", "/inbox"];
@@ -27,6 +28,7 @@ export async function updateSession(request: NextRequest) {
   const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
   const supabase = createServerClient<Database>(supabaseUrl, supabaseKey, {
+    cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll() { return request.cookies.getAll(); },
       setAll(cookiesToSet) {

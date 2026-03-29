@@ -5,6 +5,7 @@ export const dynamic = "force-dynamic";
 
 import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
+import { SUPABASE_AUTH_COOKIE_OPTIONS } from "@/lib/auth-utils";
 
 export async function POST(request: NextRequest) {
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
@@ -13,6 +14,7 @@ export async function POST(request: NextRequest) {
   const response = NextResponse.json({ ok: true });
 
   const supabase = createServerClient(supabaseUrl, supabaseKey, {
+    cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
     cookies: {
       getAll: ()               => request.cookies.getAll(),
       setAll: (cookiesToSet)   => {
