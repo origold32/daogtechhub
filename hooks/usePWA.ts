@@ -26,11 +26,28 @@ export function usePWA() {
   useEffect(() => {
     if (typeof window === "undefined" || !("serviceWorker" in navigator)) return;
 
+    const unregisterExistingWorkers = async () => {
+      const regs = await navigator.serviceWorker.getRegistrations().catch(() => []);
+      await Promise.all(regs.map((reg) => reg.unregister().catch(() => false)));
+
+      if ("caches" in window) {
+        const keys = await caches.keys().catch(() => []);
+        await Promise.all(
+          keys
+            .filter((key) => key.startsWith("daog-"))
+            .map((key) => caches.delete(key).catch(() => false)),
+        );
+      }
+    };
+
+    const pwaEnabled = process.env.NEXT_PUBLIC_ENABLE_PWA === "true";
+    if (!pwaEnabled) {
+      unregisterExistingWorkers().finally(() => setSwRegistered(false));
+      return;
+    }
+
     const pathname = window.location.pathname;
     const search   = new URLSearchParams(window.location.search);
-
-    // Auth routes must never be controlled by the service worker.
-    // SW caching of auth callbacks breaks PKCE cookie flow.
     const isAuthRoute =
       pathname.startsWith("/auth") ||
       search.has("code") ||
@@ -38,10 +55,7 @@ export function usePWA() {
       search.has("error");
 
     if (isAuthRoute) {
-      // Unregister any existing SW so it cannot intercept auth flows
-      navigator.serviceWorker.getRegistrations().then((regs) => {
-        regs.forEach((reg) => reg.unregister());
-      });
+      unregisterExistingWorkers().finally(() => setSwRegistered(false));
       return;
     }
 

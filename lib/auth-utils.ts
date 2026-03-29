@@ -107,6 +107,8 @@ export function clearSupabasePkceCookiesInBrowser() {
 export function isPkceMismatchError(message?: string | null) {
   const value = (message ?? "").toLowerCase();
   return (
+    (value.includes("stale") && value.includes("pkce") && value.includes("state")) ||
+    (value.includes("pkce") && value.includes("state")) ||
     (value.includes("code challenge") && value.includes("code verifier")) ||
     (value.includes("pkce") && value.includes("verifier"))
   );

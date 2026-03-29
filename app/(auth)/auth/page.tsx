@@ -14,6 +14,7 @@ import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { useSupabaseAuth, toFriendlyError } from "@/hooks/useSupabase";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
+import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import CustomCountDown from "@/components/reusables/countdown-custom";
 
 type Step = "email" | "otp" | "waiting" | "success";
@@ -58,7 +59,31 @@ function AuthForm() {
   // Show ?error= from callback redirects
   useEffect(() => {
     const err = params.get("error") ?? params.get("error_description");
-    if (err) setFormError(toFriendlyError(decodeURIComponent(err).replace(/_/g, " ")));
+    if (!err) return;
+
+    const decodedError = decodeURIComponent(err).replace(/_/g, " ");
+    setFormError(toFriendlyError(decodedError));
+
+    const normalized = decodedError.toLowerCase();
+    if (!normalized.includes("pkce")) return;
+
+    clearSupabasePkceCookiesInBrowser();
+
+    if ("serviceWorker" in navigator) {
+      navigator.serviceWorker.getRegistrations()
+        .then((regs) => Promise.all(regs.map((reg) => reg.unregister().catch(() => false))))
+        .catch(() => {});
+    }
+
+    if ("caches" in window) {
+      caches.keys()
+        .then((keys) => Promise.all(
+          keys
+            .filter((key) => key.startsWith("daog-"))
+            .map((key) => caches.delete(key).catch(() => false)),
+        ))
+        .catch(() => {});
+    }
   }, [params]);
 
   // ── THE KEY FIX: watch auth store, redirect when session is confirmed ────────
