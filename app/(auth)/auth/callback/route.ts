@@ -6,6 +6,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import {
   buildRedirectUrl,
+  detectSupabasePkceCookieOptions,
   getLegacySupabaseCookieOptions,
   isPkceMismatchError,
   listSupabasePkceCookieNames,
@@ -60,14 +61,22 @@ export async function GET(request: NextRequest) {
 
   const successUrl = new URL(redirectPath, origin).toString();
   let response = NextResponse.redirect(successUrl);
+  const requestCookies = request.cookies.getAll();
+  const requestCookieNames = requestCookies.map(({ name }) => name);
+  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
+  const supabaseKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
+  const preferredCookieOptions = detectSupabasePkceCookieOptions(
+    requestCookieNames,
+    supabaseUrl,
+  );
 
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseKey,
     {
-      cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
+      cookieOptions: preferredCookieOptions,
       cookies: {
-        getAll: () => request.cookies.getAll(),
+        getAll: () => requestCookies,
         setAll: (cookiesToSet) => {
           cookiesToSet.forEach(({ name, value, options }) => {
             response.cookies.set(name, value, options);
@@ -77,21 +86,48 @@ export async function GET(request: NextRequest) {
     }
   );
 
+  const currentCookieName = SUPABASE_AUTH_COOKIE_OPTIONS.name;
+  const usingLegacyCookieNamespace = preferredCookieOptions.name !== currentCookieName;
+  const currentSupabase = usingLegacyCookieNamespace
+    ? createServerClient(
+        supabaseUrl,
+        supabaseKey,
+        {
+          cookieOptions: SUPABASE_AUTH_COOKIE_OPTIONS,
+          cookies: {
+            getAll: () => requestCookies,
+            setAll: (cookiesToSet) => {
+              cookiesToSet.forEach(({ name, value, options }) => {
+                response.cookies.set(name, value, options);
+              });
+            },
+          },
+        }
+      )
+    : supabase;
+
   let { data, error } = await supabase.auth.exchangeCodeForSession(code);
 
-  if ((error || !data?.user) && isPkceMismatchError(error?.message)) {
-    const legacyCookieOptions = getLegacySupabaseCookieOptions(
-      process.env.NEXT_PUBLIC_SUPABASE_URL,
-    );
+  if (!error && data?.user && data.session && usingLegacyCookieNamespace) {
+    const migration = await currentSupabase.auth.setSession({
+      access_token: data.session.access_token,
+      refresh_token: data.session.refresh_token,
+    });
 
-    if (legacyCookieOptions) {
+    if (migration.error) {
+      error = migration.error;
+    }
+  } else if ((error || !data?.user) && isPkceMismatchError(error?.message)) {
+    const legacyCookieOptions = getLegacySupabaseCookieOptions(supabaseUrl);
+
+    if (legacyCookieOptions && preferredCookieOptions.name !== legacyCookieOptions.name) {
       const legacySupabase = createServerClient(
-        process.env.NEXT_PUBLIC_SUPABASE_URL!,
-        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        supabaseUrl,
+        supabaseKey,
         {
           cookieOptions: legacyCookieOptions,
           cookies: {
-            getAll: () => request.cookies.getAll(),
+            getAll: () => requestCookies,
             setAll: () => {},
           },
         }
@@ -100,7 +136,7 @@ export async function GET(request: NextRequest) {
       const legacyResult = await legacySupabase.auth.exchangeCodeForSession(code);
 
       if (!legacyResult.error && legacyResult.data.user && legacyResult.data.session) {
-        const migration = await supabase.auth.setSession({
+        const migration = await currentSupabase.auth.setSession({
           access_token: legacyResult.data.session.access_token,
           refresh_token: legacyResult.data.session.refresh_token,
         });

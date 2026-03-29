@@ -1,5 +1,14 @@
 const DEFAULT_AUTH_REDIRECT_PATH = "/profile";
-export const SUPABASE_AUTH_COOKIE_NAME = "daogtechhub-auth";
+const CUSTOM_AUTH_COOKIE_NAME = "daogtechhub-auth";
+
+function getProjectRefAuthStorageKey(supabaseUrl?: string) {
+  if (!supabaseUrl) return null;
+  const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
+  return `sb-${projectRef}-auth-token`;
+}
+
+export const SUPABASE_AUTH_COOKIE_NAME =
+  getProjectRefAuthStorageKey(process.env.NEXT_PUBLIC_SUPABASE_URL) ?? CUSTOM_AUTH_COOKIE_NAME;
 export const SUPABASE_AUTH_COOKIE_OPTIONS = {
   name: SUPABASE_AUTH_COOKIE_NAME,
   path: "/",
@@ -44,27 +53,44 @@ export function buildRedirectUrl(
   return url.toString();
 }
 
-function getLegacySupabaseStorageKey(supabaseUrl?: string) {
-  if (!supabaseUrl) return null;
-  const projectRef = new URL(supabaseUrl).hostname.split(".")[0];
-  return `sb-${projectRef}-auth-token`;
-}
-
 export function getLegacySupabaseCookieOptions(supabaseUrl?: string) {
-  const legacyName = getLegacySupabaseStorageKey(supabaseUrl);
-  if (!legacyName) return null;
+  const currentName = getProjectRefAuthStorageKey(supabaseUrl) ?? SUPABASE_AUTH_COOKIE_NAME;
+  if (currentName === CUSTOM_AUTH_COOKIE_NAME) return null;
 
   return {
     ...SUPABASE_AUTH_COOKIE_OPTIONS,
-    name: legacyName,
+    name: CUSTOM_AUTH_COOKIE_NAME,
   };
 }
 
 function getSupabaseStorageKeys(supabaseUrl?: string) {
-  return [
-    SUPABASE_AUTH_COOKIE_NAME,
-    getLegacySupabaseStorageKey(supabaseUrl),
-  ].filter((value): value is string => Boolean(value));
+  const currentName = getProjectRefAuthStorageKey(supabaseUrl) ?? SUPABASE_AUTH_COOKIE_NAME;
+  return Array.from(
+    new Set(
+      [currentName, CUSTOM_AUTH_COOKIE_NAME].filter((value): value is string => Boolean(value)),
+    ),
+  );
+}
+
+function hasPkcePrefix(cookieNames: string[], storageKey: string) {
+  const prefix = `${storageKey}-code-verifier`;
+  return cookieNames.some(
+    (name) => name === prefix || name.startsWith(`${prefix}.`),
+  );
+}
+
+export function detectSupabasePkceCookieOptions(cookieNames: string[], supabaseUrl?: string) {
+  const currentName = getProjectRefAuthStorageKey(supabaseUrl) ?? SUPABASE_AUTH_COOKIE_NAME;
+  const selectedName = hasPkcePrefix(cookieNames, currentName)
+    ? currentName
+    : hasPkcePrefix(cookieNames, CUSTOM_AUTH_COOKIE_NAME)
+      ? CUSTOM_AUTH_COOKIE_NAME
+      : currentName;
+
+  return {
+    ...SUPABASE_AUTH_COOKIE_OPTIONS,
+    name: selectedName,
+  };
 }
 
 export function listSupabasePkceCookieNames(cookieNames: string[], supabaseUrl?: string) {
