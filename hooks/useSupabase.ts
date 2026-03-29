@@ -6,6 +6,10 @@ import {
   getSupabaseBrowserClient as _getClient,
   resetSupabaseBrowserClient,
 } from "@/lib/supabaseClient";
+import {
+  getSupabaseImplicitClient,
+  resetSupabaseImplicitClient,
+} from "@/lib/supabaseImplicitClient";
 import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
@@ -335,11 +339,28 @@ export function useSupabaseAuth() {
     }
 
     resetSupabaseBrowserClient();
+    resetSupabaseImplicitClient();
     try {
-      const startUrl = new URL("/auth/oauth/start", window.location.origin);
-      startUrl.searchParams.set("provider", provider);
-      startUrl.searchParams.set("next", redirectPath && redirectPath !== "/" ? redirectPath : "/profile");
-      window.location.assign(startUrl.toString());
+      const supabase = getSupabaseImplicitClient();
+      if (!supabase) {
+        throw new Error("Supabase not configured - check your .env.local file.");
+      }
+
+      const verifyingUrl = new URL("/auth/verifying", window.location.origin);
+      verifyingUrl.searchParams.set("next", redirectPath && redirectPath !== "/" ? redirectPath : "/profile");
+      verifyingUrl.searchParams.set("oauthProvider", provider);
+
+      const { error } = await supabase.auth.signInWithOAuth({
+        provider,
+        options: {
+          redirectTo: verifyingUrl.toString(),
+        },
+      });
+
+      if (error) {
+        throw error;
+      }
+
       return { success: true as const };
     } catch (error) {
       setIsLoading(false);

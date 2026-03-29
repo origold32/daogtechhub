@@ -13,6 +13,7 @@ import AppLogo from "@/components/reusables/app-logo";
 import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { useSupabaseAuth, toFriendlyError } from "@/hooks/useSupabase";
 import { resetSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { resetSupabaseImplicitClient } from "@/lib/supabaseImplicitClient";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
 import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
@@ -70,6 +71,7 @@ function AuthForm() {
 
     clearSupabasePkceCookiesInBrowser();
     resetSupabaseBrowserClient();
+    resetSupabaseImplicitClient();
 
     if ("serviceWorker" in navigator) {
       navigator.serviceWorker.getRegistrations()

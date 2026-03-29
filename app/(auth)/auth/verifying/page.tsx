@@ -1,7 +1,5 @@
 // app/(auth)/auth/verifying/page.tsx
-// UI-only session confirmation page. No auth logic.
-// If ?code= arrives here, it means the wrong redirect URL is configured —
-// immediately surface this as an error rather than looping silently.
+// Session confirmation page for email and OAuth redirects.
 "use client";
 
 import { useEffect, useRef, useState, Suspense } from "react";
@@ -10,6 +8,8 @@ import { motion, AnimatePresence } from "framer-motion";
 import { CheckCircle2, XCircle, Mail } from "lucide-react";
 import AppLogo from "@/components/reusables/app-logo";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { getSupabaseImplicitClient, resetSupabaseImplicitClient } from "@/lib/supabaseImplicitClient";
+import { useAuthStore } from "@/store/authStore";
 
 const STEPS = ["Verifying your identity…","Securing your session…","Loading your profile…","Almost there…"];
 type UIState = "verifying" | "success" | "error";
@@ -20,6 +20,7 @@ function VerifyingContent() {
   const next   = params.get("next") ?? "/profile";
   const code   = params.get("code"); // should NEVER be here
   const tokenHash = params.get("token_hash");
+  const oauthProvider = params.get("oauthProvider");
 
   const [uiState,   setUiState]   = useState<UIState>("verifying");
   const [stepIndex, setStepIndex] = useState(0);
@@ -51,10 +52,8 @@ function VerifyingContent() {
     // Don't start session polling in that case.
     if (code || tokenHash) return;
 
-    // Normal path: session already established by /auth/callback or /auth/confirm.
-    // Poll until cookies are readable by the browser client.
-    const supabase = getSupabaseBrowserClient();
-    const checkSession = async () => {
+    const checkCookieSession = async () => {
+      const supabase = getSupabaseBrowserClient();
       for (let i = 0; i < 20; i++) {
         const { data, error } = await supabase.auth.getSession();
         if (error) { setErrorMsg("Sign-in failed. Please try again."); setUiState("error"); return; }
@@ -69,9 +68,77 @@ function VerifyingContent() {
       setUiState("error");
     };
 
-    checkSession();
+    const completeImplicitOAuth = async () => {
+      const implicitSupabase = getSupabaseImplicitClient();
+      if (!implicitSupabase) {
+        setErrorMsg("Google sign-in is not configured correctly.");
+        setUiState("error");
+        return;
+      }
+
+      for (let i = 0; i < 20; i++) {
+        const { data, error } = await implicitSupabase.auth.getSession();
+        if (error) {
+          setErrorMsg("Google sign-in failed. Please try again.");
+          setUiState("error");
+          return;
+        }
+
+        const session = data.session;
+        if (!session) {
+          await new Promise((resolve) => setTimeout(resolve, 250));
+          continue;
+        }
+
+        const res = await fetch("/api/auth/session", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            access_token: session.access_token,
+            refresh_token: session.refresh_token,
+          }),
+        });
+
+        const json = await res.json().catch(() => ({ success: false, error: "Could not complete sign-in." }));
+        if (!res.ok || !json.success || !json.user?.id) {
+          setErrorMsg(json.error ?? "Could not complete sign-in.");
+          setUiState("error");
+          return;
+        }
+
+        const meta = (json.user.user_metadata ?? {}) as Record<string, string>;
+        const rawName = meta.full_name ?? meta.name ?? json.user.email?.split("@")[0] ?? "User";
+        const parts = String(rawName).trim().split(/\s+/);
+
+        useAuthStore.getState().login({
+          id: json.user.id,
+          firstName: meta.first_name ?? parts[0] ?? "User",
+          lastName: meta.last_name ?? parts.slice(1).join(" ") ?? "",
+          email: json.user.email ?? "",
+          phone: json.user.phone ?? undefined,
+          avatar: meta.avatar_url ?? meta.picture ?? undefined,
+          role: "customer",
+        });
+
+        window.history.replaceState({}, "", `/auth/verifying?next=${encodeURIComponent(redirectPath)}`);
+        resetSupabaseImplicitClient();
+        setUiState("success");
+        setTimeout(() => router.replace(redirectPath), 500);
+        return;
+      }
+
+      setErrorMsg("Google sign-in could not be confirmed. Please try again.");
+      setUiState("error");
+    };
+
+    if (oauthProvider) {
+      completeImplicitOAuth();
+      return;
+    }
+
+    checkCookieSession();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [code, tokenHash, redirectPath, router]);
+  }, [code, tokenHash, oauthProvider, redirectPath, router]);
 
   useEffect(() => {
     if (uiState !== "verifying") return;
