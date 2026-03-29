@@ -50,6 +50,16 @@ function getLegacySupabaseStorageKey(supabaseUrl?: string) {
   return `sb-${projectRef}-auth-token`;
 }
 
+export function getLegacySupabaseCookieOptions(supabaseUrl?: string) {
+  const legacyName = getLegacySupabaseStorageKey(supabaseUrl);
+  if (!legacyName) return null;
+
+  return {
+    ...SUPABASE_AUTH_COOKIE_OPTIONS,
+    name: legacyName,
+  };
+}
+
 function getSupabaseStorageKeys(supabaseUrl?: string) {
   return [
     SUPABASE_AUTH_COOKIE_NAME,
@@ -92,4 +102,12 @@ export function clearSupabasePkceCookiesInBrowser() {
   } catch {
     // Cookie storage is the primary source of truth, so ignore localStorage failures.
   }
+}
+
+export function isPkceMismatchError(message?: string | null) {
+  const value = (message ?? "").toLowerCase();
+  return (
+    (value.includes("code challenge") && value.includes("code verifier")) ||
+    (value.includes("pkce") && value.includes("verifier"))
+  );
 }

@@ -6,6 +6,8 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import {
   buildRedirectUrl,
+  getLegacySupabaseCookieOptions,
+  isPkceMismatchError,
   listSupabasePkceCookieNames,
   resolveRequestOrigin,
   sanitizeRedirectPath,
@@ -76,12 +78,46 @@ export async function GET(request: NextRequest) {
     }
   );
 
-  const { data, error } = await supabase.auth.exchangeCodeForSession(code);
+  let { data, error } = await supabase.auth.exchangeCodeForSession(code);
+
+  if ((error || !data?.user) && isPkceMismatchError(error?.message)) {
+    const legacyCookieOptions = getLegacySupabaseCookieOptions(
+      process.env.NEXT_PUBLIC_SUPABASE_URL,
+    );
+
+    if (legacyCookieOptions) {
+      const legacySupabase = createServerClient(
+        process.env.NEXT_PUBLIC_SUPABASE_URL!,
+        process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+        {
+          cookieOptions: legacyCookieOptions,
+          cookies: {
+            getAll: () => request.cookies.getAll(),
+            setAll: () => {},
+          },
+        }
+      );
+
+      const legacyResult = await legacySupabase.auth.exchangeCodeForSession(code);
+
+      if (!legacyResult.error && legacyResult.data.user && legacyResult.data.session) {
+        const migration = await supabase.auth.setSession({
+          access_token: legacyResult.data.session.access_token,
+          refresh_token: legacyResult.data.session.refresh_token,
+        });
+
+        if (!migration.error) {
+          data = legacyResult.data;
+          error = null;
+        }
+      }
+    }
+  }
 
   if (error || !data.user) {
     const message = error?.message ?? "Sign-in failed.";
     const errorUrl = new URL(authUrl);
-    if (message.includes("code challenge") && message.includes("code verifier")) {
+    if (isPkceMismatchError(message)) {
       errorUrl.searchParams.set("error", "OAuth failed due to stale PKCE state. Please try Google again.");
       return redirectWithClearedPkce(request, errorUrl.toString());
     }
