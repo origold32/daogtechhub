@@ -1,8 +1,12 @@
 // app/api/orders/[id]/route.ts
 
 import { NextRequest } from "next/server";
-import { ok, notFound, serverError, forbidden } from "@/lib/api-response";
+import { ok, notFound, serverError, forbidden, badRequest } from "@/lib/api-response";
 import { requireAuth, requireRole } from "@/lib/auth-guard";
+
+const VALID_ORDER_STATUSES = [
+  "pending", "awaiting_payment", "payment_submitted", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded",
+] as const;
 
 type Params = { params: Promise<{ id: string }> };
 
@@ -44,11 +48,20 @@ export async function PATCH(req: NextRequest, { params }: Params) {
     if (auth.error) return auth.error;
 
     const { id } = await params;
-    const { status, notes } = await req.json();
+    const body = await req.json();
+    const status = body.status as string | undefined;
+    const notes = body.notes as string | undefined;
+
+    if (!status || !VALID_ORDER_STATUSES.includes(status as any)) {
+      return badRequest(`status must be one of: ${VALID_ORDER_STATUSES.join(", ")}`);
+    }
+
+    const updatePayload: Record<string, unknown> = { status, updated_at: new Date().toISOString() };
+    if (notes !== undefined) updatePayload.notes = String(notes).trim();
 
     const { data, error } = await auth.supabase
       .from("orders")
-      .update({ status, notes, updated_at: new Date().toISOString() })
+      .update(updatePayload)
       .eq("id", id)
       .select()
       .single();

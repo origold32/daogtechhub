@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
-import { useFetchProducts } from "@/hooks/useProducts";
+import { useFetchProducts, useFetchOne } from "@/hooks/useProducts";
 import {
   LayoutDashboard, Package, ShoppingBag, Users, TrendingUp,
   ArrowRightLeft, MessageSquare, Settings, LogOut, Menu,
@@ -21,7 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 
-type AdminSection = "overview" | "products" | "orders" | "analytics" | "swaps" | "enquiries" | "settings" | "users" | "auth-logs" | "marketing";
+type AdminSection = "overview" | "products" | "orders" | "analytics" | "support" | "swaps" | "enquiries" | "manual-payments" | "settings" | "users" | "auth-logs" | "marketing";
 type UserRole = "admin" | "customer" | "vendor";
 
 interface LiveUser {
@@ -35,13 +35,89 @@ interface LiveUser {
   created_at: string;
 }
 
+interface AdminOrder {
+  id: string;
+  status: string;
+  payment_method: string | null;
+  payment_reference: string | null;
+  subtotal_amount: number;
+  discount_amount: number;
+  delivery_fee: number;
+  grand_total: number;
+  currency: string;
+  created_at: string;
+  profiles: { first_name: string; last_name: string; email: string | null } | null;
+  order_items: Array<{ product_name: string; quantity: number; unit_price: number }>;
+}
+
+interface AdminStats {
+  totalOrders: number;
+  pendingOrders: number;
+  confirmedOrders: number;
+  processingOrders: number;
+  shippedOrders: number;
+  deliveredOrders: number;
+  ordersThisMonth: number;
+  totalUsers: number;
+  pendingSwaps: number;
+  pendingManualPayments: number;
+  totalRevenue: number;
+  revenueThisMonth: number;
+  inventory: {
+    gadgets: number;
+    jerseys: number;
+    cars: number;
+    realEstates: number;
+  };
+  lowStock: number;
+  unreadNotifications: number;
+  recentOrders: Array<{ id: string; status: string; grand_total: number; created_at: string; profiles: { first_name: string; last_name: string; email: string | null } | null }>;
+  monthlyRevenue: Array<{ m: string; v: number }>;
+  categoryBreakdown: Array<{ label: string; count: number }>;
+}
+
+interface AnalyticsSummary {
+  summary: {
+    productViews: number;
+    addToCart: number;
+    checkoutStarted: number;
+    paymentSuccess: number;
+    paymentFailure: number;
+    manualPaymentApproved: number;
+    manualPaymentRejected: number;
+    webhookDuplicates: number;
+    invalidSignatures: number;
+    conversionRate: number;
+  };
+  topProducts: Array<{ name: string; count: number; category: string | null }>;
+  topCategories: Array<{ label: string; count: number }>;
+  range: string;
+  liveAt: string;
+}
+
+interface AdminAlerts {
+  repeatedPaymentFailures: number;
+  webhookDuplicates: number;
+  invalidSignatures: number;
+  recentAuthAlerts: Array<{ id: string; user_id: string | null; event_type: string; ip_address: string | null; user_agent: string | null; created_at: string }>;
+  liveAt: string;
+}
+
+interface SupportSearchResult {
+  orders: Array<{ id: string; user_id: string; status: string; payment_reference: string | null; grand_total: number; currency: string; created_at: string }>;
+  receipts: Array<{ id: string; order_id: string; receipt_number: string; payment_reference: string | null; amount_paid: number; currency: string; customer_email: string | null; created_at: string }>;
+  users: Array<{ id: string; email: string | null; first_name: string | null; last_name: string | null; role: UserRole; created_at: string }>;
+}
+
 const NAV_ITEMS = [
   { id: "overview" as const, label: "Overview", icon: LayoutDashboard },
   { id: "products" as const, label: "Products", icon: Package },
   { id: "orders" as const, label: "Orders", icon: ShoppingBag, badge: 3 },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
+  { id: "support" as const, label: "Support", icon: Search },
   { id: "swaps" as const, label: "Swaps", icon: ArrowRightLeft, badge: 2 },
   { id: "enquiries" as const, label: "Enquiries", icon: MessageSquare, badge: 5 },
+  { id: "manual-payments" as const, label: "Manual Payments", icon: Upload },
   { id: "users" as const, label: "Users & Roles", icon: Users },
   { id: "auth-logs" as const, label: "Auth Logs", icon: Lock },
   { id: "settings" as const, label: "Settings", icon: Settings },
@@ -114,6 +190,87 @@ export default function AdminPage() {
   const [usersLoading, setUsersLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
 
+  const statsState = useFetchOne<AdminStats>("/api/admin/stats");
+  const ordersState = useFetchOne<AdminOrder[]>("/api/admin/orders?pageSize=6");
+  const manualPaymentsState = useFetchOne<AdminOrder[]>("/api/admin/manual-payments");
+  const [analyticsRange, setAnalyticsRange] = useState<"7d" | "30d" | "90d">("7d");
+  const [supportQuery, setSupportQuery] = useState("");
+  const [supportResults, setSupportResults] = useState<SupportSearchResult | null>(null);
+  const [supportLoading, setSupportLoading] = useState(false);
+  const [supportError, setSupportError] = useState<string | null>(null);
+
+  const analyticsState = useFetchOne<AnalyticsSummary>(`/api/admin/analytics?range=${analyticsRange}`);
+  const alertsState = useFetchOne<AdminAlerts>("/api/admin/alerts");
+
+  const overviewStats = statsState.data
+    ? [
+        {
+          label: "Total Revenue",
+          value: formatCurrency(statsState.data.totalRevenue),
+          change: statsState.data.totalRevenue > 0
+            ? `+${((statsState.data.revenueThisMonth / statsState.data.totalRevenue) * 100).toFixed(1)}%`
+            : "–",
+          up: true,
+          icon: DollarSign,
+          color: "from-purple-500/20 to-lilac/10",
+        },
+        {
+          label: "Pending Orders",
+          value: statsState.data.pendingOrders.toString(),
+          change: `${statsState.data.ordersThisMonth} this month`,
+          up: false,
+          icon: Clock,
+          color: "from-amber-500/20 to-amber-400/10",
+        },
+        {
+          label: "Manual Reviews",
+          value: statsState.data.pendingManualPayments.toString(),
+          change: `${statsState.data.pendingManualPayments} awaiting approval`,
+          up: statsState.data.pendingManualPayments === 0,
+          icon: Upload,
+          color: "from-blue-500/20 to-blue-400/10",
+        },
+        {
+          label: "Confirmed Orders",
+          value: statsState.data.confirmedOrders.toString(),
+          change: `${statsState.data.confirmedOrders} confirmed`,
+          up: true,
+          icon: Check,
+          color: "from-green-500/20 to-green-400/10",
+        },
+        {
+          label: "Low Stock",
+          value: statsState.data.lowStock.toString(),
+          change: `${statsState.data.lowStock} items`,
+          up: false,
+          icon: AlertTriangle,
+          color: "from-red-500/20 to-red-400/10",
+        },
+      ]
+    : STATS;
+
+  const revenueTrend = statsState.data?.monthlyRevenue ?? MONTHLY_REVENUE;
+  const totalInventory = statsState.data
+    ? statsState.data.inventory.gadgets + statsState.data.inventory.jerseys + statsState.data.inventory.cars + statsState.data.inventory.realEstates
+    : 0;
+  const categoryBreakdown = statsState.data
+    ? [
+        { label: "Gadgets", pct: totalInventory ? Math.round((statsState.data.inventory.gadgets / totalInventory) * 100) : 0, color: "bg-lilac" },
+        { label: "Cars", pct: totalInventory ? Math.round((statsState.data.inventory.cars / totalInventory) * 100) : 0, color: "bg-blue-400" },
+        { label: "Real Estate", pct: totalInventory ? Math.round((statsState.data.inventory.realEstates / totalInventory) * 100) : 0, color: "bg-green-400" },
+        { label: "Jerseys", pct: totalInventory ? Math.round((statsState.data.inventory.jerseys / totalInventory) * 100) : 0, color: "bg-amber-400" },
+      ]
+    : CATEGORY_BREAKDOWN;
+
+  const recentOrders = statsState.data?.recentOrders ?? [];
+  const adminOrders = ordersState.data ?? [];
+  const manualPaymentOrders = manualPaymentsState.data ?? [];
+  const statsError = statsState.error;
+  const ordersError = ordersState.error;
+  const manualPaymentsError = manualPaymentsState.error;
+  const isOrdersLoading = ordersState.loading;
+  const isManualPaymentsLoading = manualPaymentsState.loading;
+
   // Fetch live users from Supabase
   const fetchUsers = async () => {
     setUsersLoading(true);
@@ -128,6 +285,27 @@ export default function AdminPage() {
       toast.error("Failed to load users");
     } finally {
       setUsersLoading(false);
+    }
+  };
+
+  const handleSupportSearch = async () => {
+    const query = supportQuery.trim();
+    if (!query) {
+      setSupportError("Enter an order ID, reference, or email to search.");
+      return;
+    }
+    setSupportLoading(true);
+    setSupportError(null);
+    try {
+      const res = await fetch(`/api/admin/support/search?q=${encodeURIComponent(query)}`);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? "Search failed");
+      setSupportResults(json.data);
+    } catch (err) {
+      setSupportError((err as Error).message ?? "Failed to search");
+      setSupportResults(null);
+    } finally {
+      setSupportLoading(false);
     }
   };
 
@@ -156,6 +334,24 @@ export default function AdminPage() {
       toast.error((err as Error).message ?? "Failed to update role");
     } finally {
       setRoleUpdating(null);
+    }
+  };
+
+  const handleManualPaymentAction = async (orderId: string, action: "approve" | "reject") => {
+    try {
+      const res = await fetch(`/api/admin/manual-payments/${orderId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? "Unable to update manual payment");
+      toast.success(json.message ?? `Manual payment ${action}d successfully`);
+      manualPaymentsState.mutate?.();
+      ordersState.mutate?.();
+      statsState.mutate?.();
+    } catch (err) {
+      toast.error((err as Error).message ?? "Failed to update manual payment");
     }
   };
 
@@ -191,10 +387,10 @@ export default function AdminPage() {
   };
 
   // Live product data from API
-  const { data: gadgetsData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;brand:string;condition:string}>(`/api/gadgets?pageSize=100`);
-  const { data: jerseysData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;team:string}>(`/api/jerseys?pageSize=100`);
-  const { data: carsData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;brand:string;condition:string}>(`/api/cars?pageSize=100`);
-  const { data: estatesData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;type:string}>(`/api/realestate?pageSize=100`);
+  const { data: gadgetsData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;brand:string;condition:string}>(`/api/gadgets?pageSize=100`, section === "products");
+  const { data: jerseysData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;team:string}>(`/api/jerseys?pageSize=100`, section === "products");
+  const { data: carsData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;brand:string;condition:string}>(`/api/cars?pageSize=100`, section === "products");
+  const { data: estatesData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;type:string}>(`/api/realestate?pageSize=100`, section === "products");
 
   const allProducts = [
     ...gadgetsData.map((p) => ({ ...p, cat: "Gadget", img: p.image_url, image: p.image_url })),
@@ -250,9 +446,9 @@ export default function AdminPage() {
                     )}>
                     <Icon className="w-4 h-4" />
                     {item.label}
-                    {item.badge && (
+                    {((item.id === "manual-payments" ? manualPaymentOrders.length : item.badge) ?? 0) > 0 && (
                       <span className={cn("ml-auto text-xs px-1.5 py-0.5 rounded-full font-bold", section === item.id ? "bg-deep-purple/30 text-deep-purple" : "bg-red-500/20 text-red-400")}>
-                        {item.badge}
+                        {item.id === "manual-payments" ? manualPaymentOrders.length : item.badge}
                       </span>
                     )}
                   </button>
@@ -335,7 +531,7 @@ export default function AdminPage() {
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {STATS.map((stat, i) => {
+                    {overviewStats.map((stat, i) => {
                       const Icon = stat.icon;
                       return (
                         <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
@@ -362,7 +558,7 @@ export default function AdminPage() {
                         <span className="text-xs text-muted-lavender bg-white/5 px-3 py-1 rounded-full">Last 7 months</span>
                       </div>
                       <div className="flex items-end gap-2 h-32">
-                        {MONTHLY_REVENUE.map(({ m, v }, i) => (
+                        {revenueTrend.map(({ m, v }, i) => (
                           <div key={m} className="flex-1 flex flex-col items-center gap-1 group">
                             <span className="text-xs text-muted-lavender opacity-0 group-hover:opacity-100 transition-opacity">
                               ₦{(v * 0.845).toFixed(0)}M
@@ -381,9 +577,9 @@ export default function AdminPage() {
 
                     {/* Category breakdown */}
                     <div className="p-5 rounded-2xl border border-white/10 bg-white/3">
-                      <h3 className="text-soft-white font-bold mb-5">Sales by Category</h3>
+                      <h3 className="text-soft-white font-bold mb-5">Inventory by Category</h3>
                       <div className="space-y-4">
-                        {CATEGORY_BREAKDOWN.map(({ label, pct, color }, i) => (
+                        {categoryBreakdown.map(({ label, pct, color }, i) => (
                           <div key={label}>
                             <div className="flex justify-between mb-1.5">
                               <span className="text-muted-lavender text-sm">{label}</span>
@@ -411,16 +607,20 @@ export default function AdminPage() {
                           <th key={h} className="px-5 py-3 text-left text-xs text-muted-lavender uppercase tracking-wider">{h}</th>
                         ))}</tr></thead>
                         <tbody className="divide-y divide-white/5">
-                          {RECENT_ORDERS.slice(0, 4).map((o) => (
-                            <tr key={o.id} className="hover:bg-white/3 transition-colors">
-                              <td className="px-5 py-3 text-lilac text-sm font-mono">{o.id}</td>
-                              <td className="px-5 py-3 text-soft-white text-sm">{o.customer}</td>
-                              <td className="px-5 py-3 text-muted-lavender text-sm">{o.product}</td>
-                              <td className="px-5 py-3 text-soft-white text-sm font-semibold">{formatCurrency(o.amount)}</td>
-                              <td className="px-5 py-3"><span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[o.status])}>{o.status}</span></td>
-                              <td className="px-5 py-3 text-muted-lavender text-xs">{o.date}</td>
-                            </tr>
-                          ))}
+                          {recentOrders.slice(0, 4).map((o) => {
+                            const label = o.profiles ? `${o.profiles.first_name} ${o.profiles.last_name}` : "Unknown";
+                            const product = o.order_items?.[0]?.product_name ?? "—";
+                            return (
+                              <tr key={o.id} className="hover:bg-white/3 transition-colors">
+                                <td className="px-5 py-3 text-lilac text-sm font-mono">{o.id}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm">{label}</td>
+                                <td className="px-5 py-3 text-muted-lavender text-sm">{product}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm font-semibold">{formatCurrency(o.grand_total)}</td>
+                                <td className="px-5 py-3"><span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[o.status] ?? "bg-white/10 text-white/80")}>{o.status}</span></td>
+                                <td className="px-5 py-3 text-muted-lavender text-xs">{new Date(o.created_at).toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>
@@ -485,86 +685,185 @@ export default function AdminPage() {
               {/* ANALYTICS */}
               {section === "analytics" && (
                 <div className="space-y-5">
-                  <div className="flex items-center justify-between">
-                    <h1 className="text-2xl font-bold text-soft-white">Analytics</h1>
-                    <button className="flex items-center gap-2 text-xs text-muted-lavender hover:text-soft-white px-3 py-2 rounded-xl border border-white/10 hover:bg-white/5 transition-colors">
-                      <Download className="w-4 h-4" /> Export Report
-                    </button>
-                  </div>
-
-                  {/* KPI row */}
-                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[
-                      { label: "Avg Order Value", value: "₦658K", sub: "+₦45K vs last month" },
-                      { label: "Conversion Rate", value: "3.8%", sub: "+0.6% this week" },
-                      { label: "Cart Abandonment", value: "62%", sub: "-4% improvement" },
-                      { label: "Loyalty Members", value: "842", sub: "+68 this month" },
-                    ].map(({ label, value, sub }) => (
-                      <div key={label} className="p-4 rounded-2xl bg-white/3 border border-white/10">
-                        <p className="text-muted-lavender text-xs mb-1">{label}</p>
-                        <p className="text-2xl font-black text-soft-white">{value}</p>
-                        <p className="text-xs text-green-400 mt-0.5">{sub}</p>
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* Revenue chart */}
-                  <div className="p-5 rounded-2xl border border-white/10 bg-white/3">
-                    <h3 className="text-soft-white font-bold mb-2">Monthly Revenue (₦ Millions)</h3>
-                    <p className="text-muted-lavender text-xs mb-5">Total: ₦84.5M · Growth: +12.5%</p>
-                    <div className="flex items-end gap-3 h-40">
-                      {MONTHLY_REVENUE.map(({ m, v }, i) => (
-                        <div key={m} className="flex-1 flex flex-col items-center gap-1.5 group">
-                          <motion.div initial={{ height: 0 }} animate={{ height: `${v}%` }} transition={{ duration: 1, delay: i * 0.1 }}
-                            className="w-full rounded-t-lg bg-gradient-to-t from-lilac/30 to-lilac hover:from-lilac/60 hover:to-purple-400 transition-colors cursor-pointer" />
-                          <span className="text-xs text-muted-lavender">{m}</span>
-                        </div>
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <h1 className="text-2xl font-bold text-soft-white">Analytics</h1>
+                      <p className="text-muted-lavender text-sm mt-1 max-w-2xl">
+                        Live operational metrics from the analytics_events table and payment flows.
+                      </p>
+                    </div>
+                    <div className="flex flex-wrap gap-2 items-center">
+                      {(["7d", "30d", "90d"] as const).map((range) => (
+                        <button key={range} onClick={() => setAnalyticsRange(range)}
+                          className={cn(
+                            "text-xs px-3 py-2 rounded-xl border transition-colors",
+                            analyticsRange === range
+                              ? "bg-lilac text-deep-purple border-lilac"
+                              : "bg-white/5 text-muted-lavender border-white/10 hover:bg-white/10",
+                          )}
+                        >
+                          {range}
+                        </button>
                       ))}
+                      <button onClick={() => analyticsState.mutate?.()}
+                        className="text-xs px-3 py-2 rounded-xl bg-white/5 text-muted-lavender border border-white/10 hover:bg-white/10 transition-colors">
+                        Refresh
+                      </button>
                     </div>
                   </div>
 
-                  {/* 2-col grid */}
+                  {alertsState.data && (
+                    <div className="rounded-2xl border border-amber-400/20 bg-amber-500/10 p-4 text-sm text-amber-100">
+                      <div className="font-semibold text-amber-100">Operational alerts</div>
+                      <ul className="mt-2 space-y-1">
+                        {alertsState.data.repeatedPaymentFailures > 2 && (
+                          <li>Repeated payment failures in the last hour: {alertsState.data.repeatedPaymentFailures}</li>
+                        )}
+                        {alertsState.data.webhookDuplicates > 0 && (
+                          <li>Webhook duplicates detected: {alertsState.data.webhookDuplicates}</li>
+                        )}
+                        {alertsState.data.invalidSignatures > 0 && (
+                          <li>Invalid webhook signatures rejected: {alertsState.data.invalidSignatures}</li>
+                        )}
+                        {alertsState.data.recentAuthAlerts.length > 0 && (
+                          <li>Suspicious auth activity detected: {alertsState.data.recentAuthAlerts.length} recent events</li>
+                        )}
+                      </ul>
+                    </div>
+                  )}
+
+                  <div className="grid grid-cols-2 xl:grid-cols-4 gap-4">
+                    {analyticsState.loading ? (
+                      <div className="col-span-4 rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-muted-lavender">Loading analytics…</div>
+                    ) : analyticsState.error ? (
+                      <div className="col-span-4 rounded-2xl border border-red-400/20 bg-red-500/10 p-6 text-center text-red-100">{analyticsState.error}</div>
+                    ) : (
+                      [
+                        { label: "Product views", value: analyticsState.data?.summary.productViews.toLocaleString() ?? "0" },
+                        { label: "Add to cart", value: analyticsState.data?.summary.addToCart.toLocaleString() ?? "0" },
+                        { label: "Checkout started", value: analyticsState.data?.summary.checkoutStarted.toLocaleString() ?? "0" },
+                        { label: "Conversion rate", value: `${analyticsState.data?.summary.conversionRate.toFixed(1) ?? 0}%` },
+                        { label: "Payment success", value: analyticsState.data?.summary.paymentSuccess.toLocaleString() ?? "0" },
+                        { label: "Payment failures", value: analyticsState.data?.summary.paymentFailure.toLocaleString() ?? "0" },
+                        { label: "Manual approved", value: analyticsState.data?.summary.manualPaymentApproved.toLocaleString() ?? "0" },
+                        { label: "Manual rejected", value: analyticsState.data?.summary.manualPaymentRejected.toLocaleString() ?? "0" },
+                      ].map(({ label, value }) => (
+                        <div key={label} className="p-4 rounded-2xl bg-white/5 border border-white/10">
+                          <p className="text-muted-lavender text-xs mb-1">{label}</p>
+                          <p className="text-2xl font-black text-soft-white">{value}</p>
+                        </div>
+                      ))
+                    )}
+                  </div>
+
                   <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-                    <div className="p-5 rounded-2xl border border-white/10 bg-white/3">
-                      <h3 className="text-soft-white font-bold mb-4">Category Revenue Split</h3>
-                      <div className="space-y-4">
-                        {CATEGORY_BREAKDOWN.map(({ label, pct, color }, i) => (
-                          <div key={label}>
-                            <div className="flex justify-between mb-1.5">
-                              <span className="text-muted-lavender text-sm">{label}</span>
-                              <span className="text-soft-white text-sm font-bold">{pct}%</span>
-                            </div>
-                            <div className="h-3 bg-white/10 rounded-full overflow-hidden">
-                              <motion.div initial={{ width: 0 }} animate={{ width: `${pct}%` }} transition={{ duration: 1.2, delay: i * 0.2 }}
-                                className={cn("h-full rounded-full", color)} />
-                            </div>
+                    <div className="p-5 rounded-2xl border border-white/10 bg-white/5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-soft-white font-bold">Top categories</h3>
+                        <span className="text-xs text-muted-lavender">{analyticsState.data?.range ?? analyticsRange}</span>
+                      </div>
+                      <div className="space-y-3">
+                        {!analyticsState.data?.topCategories.length ? (
+                          <p className="text-muted-lavender text-sm">No category activity in this range.</p>
+                        ) : analyticsState.data.topCategories.map((item) => (
+                          <div key={item.label} className="flex items-center justify-between gap-2">
+                            <p className="text-soft-white text-sm">{item.label}</p>
+                            <span className="text-muted-lavender text-sm">{item.count}</span>
                           </div>
                         ))}
                       </div>
                     </div>
 
-                    <div className="p-5 rounded-2xl border border-white/10 bg-white/3">
-                      <h3 className="text-soft-white font-bold mb-4">Top Products</h3>
+                    <div className="p-5 rounded-2xl border border-white/10 bg-white/5">
+                      <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-soft-white font-bold">Top products</h3>
+                        <span className="text-xs text-muted-lavender">live</span>
+                      </div>
                       <div className="space-y-3">
-                        {[
-                          { name: "iPhone 15 Pro Max", sales: 43, revenue: "₦53.8M" },
-                          { name: "Lexus RX 350", sales: 7, revenue: "₦294M" },
-                          { name: "MacBook Pro M3", sales: 18, revenue: "₦50.4M" },
-                          { name: "Real Madrid Jersey", sales: 112, revenue: "₦5.0M" },
-                          { name: "Toyota Camry 2024", sales: 12, revenue: "₦156M" },
-                        ].map(({ name, sales, revenue }, i) => (
-                          <div key={name} className="flex items-center gap-3">
-                            <span className="text-muted-lavender/50 text-xs w-4">{i + 1}</span>
-                            <div className="flex-1">
-                              <p className="text-soft-white text-sm font-medium">{name}</p>
-                              <p className="text-muted-lavender text-xs">{sales} sold</p>
+                        {!analyticsState.data?.topProducts.length ? (
+                          <p className="text-muted-lavender text-sm">Not enough product event data yet.</p>
+                        ) : analyticsState.data.topProducts.slice(0, 8).map((product, index) => (
+                          <div key={`${product.name}-${index}`} className="flex items-center justify-between gap-3">
+                            <div className="min-w-0">
+                              <p className="text-soft-white text-sm truncate">{product.name}</p>
+                              <p className="text-muted-lavender text-xs">{product.category ?? "Unknown category"}</p>
                             </div>
-                            <span className="text-lilac font-bold text-sm">{revenue}</span>
+                            <span className="text-lilac font-bold text-sm">{product.count}</span>
                           </div>
                         ))}
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* SUPPORT */}
+              {section === "support" && (
+                <div className="space-y-5">
+                  <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                    <div>
+                      <h1 className="text-2xl font-bold text-soft-white">Support Search</h1>
+                      <p className="text-muted-lavender text-sm mt-1">
+                        Look up orders, payment references, receipts, and customer accounts from a single admin utility.
+                      </p>
+                    </div>
+                    <div className="flex gap-2 items-center w-full lg:w-auto">
+                      <input value={supportQuery} onChange={(e) => setSupportQuery(e.target.value)}
+                        placeholder="Order ID, payment reference, or email"
+                        className="min-w-0 flex-1 rounded-2xl border border-white/10 bg-white/5 px-4 py-3 text-sm text-soft-white outline-none placeholder-muted-lavender focus:border-lilac focus:ring-1 focus:ring-lilac/30"
+                      />
+                      <Button onClick={handleSupportSearch} className="bg-lilac text-deep-purple rounded-2xl text-sm font-bold">Search</Button>
+                    </div>
+                  </div>
+
+                  {supportLoading ? (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-center text-muted-lavender">Searching…</div>
+                  ) : supportError ? (
+                    <div className="rounded-2xl border border-red-400/20 bg-red-500/10 p-6 text-red-100">{supportError}</div>
+                  ) : supportResults ? (
+                    <div className="grid grid-cols-1 xl:grid-cols-3 gap-5">
+                      <div className="p-5 rounded-2xl border border-white/10 bg-white/5">
+                        <h3 className="text-soft-white font-bold mb-3">Orders</h3>
+                        {!supportResults.orders.length ? (
+                          <p className="text-muted-lavender text-sm">No orders found.</p>
+                        ) : supportResults.orders.map((order) => (
+                          <div key={order.id} className="rounded-2xl border border-white/10 p-3 mb-3 bg-white/5">
+                            <p className="text-soft-white text-sm font-semibold">{order.id}</p>
+                            <p className="text-muted-lavender text-xs">Status: {order.status}</p>
+                            <p className="text-muted-lavender text-xs">Total: {formatCurrency(order.grand_total)} {order.currency}</p>
+                            <p className="text-muted-lavender text-xs">Reference: {order.payment_reference ?? "—"}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-5 rounded-2xl border border-white/10 bg-white/5">
+                        <h3 className="text-soft-white font-bold mb-3">Receipts</h3>
+                        {!supportResults.receipts.length ? (
+                          <p className="text-muted-lavender text-sm">No receipts found.</p>
+                        ) : supportResults.receipts.map((receipt) => (
+                          <div key={receipt.id} className="rounded-2xl border border-white/10 p-3 mb-3 bg-white/5">
+                            <p className="text-soft-white text-sm font-semibold">{receipt.receipt_number}</p>
+                            <p className="text-muted-lavender text-xs">Amount: {formatCurrency(receipt.amount_paid)} {receipt.currency}</p>
+                            <p className="text-muted-lavender text-xs">Reference: {receipt.payment_reference ?? "—"}</p>
+                            <p className="text-muted-lavender text-xs">Email: {receipt.customer_email ?? "—"}</p>
+                          </div>
+                        ))}
+                      </div>
+                      <div className="p-5 rounded-2xl border border-white/10 bg-white/5">
+                        <h3 className="text-soft-white font-bold mb-3">Users</h3>
+                        {!supportResults.users.length ? (
+                          <p className="text-muted-lavender text-sm">No users found.</p>
+                        ) : supportResults.users.map((user) => (
+                          <div key={user.id} className="rounded-2xl border border-white/10 p-3 mb-3 bg-white/5">
+                            <p className="text-soft-white text-sm font-semibold">{user.first_name ?? user.email ?? "Unknown"}</p>
+                            <p className="text-muted-lavender text-xs">{user.email ?? "No email"}</p>
+                            <p className="text-muted-lavender text-xs">Role: {user.role}</p>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="rounded-2xl border border-white/10 bg-white/5 p-6 text-muted-lavender">Enter a search phrase to find support records.</div>
+                  )}
                 </div>
               )}
 
@@ -689,10 +988,12 @@ export default function AdminPage() {
                 <div className="space-y-5">
                   <h1 className="text-2xl font-bold text-soft-white">Orders</h1>
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {[{ label: "Pending", count: 3, icon: Clock, color: "text-amber-400" },
-                      { label: "Processing", count: 12, icon: Package, color: "text-blue-400" },
-                      { label: "Shipped", count: 8, icon: TrendingUp, color: "text-purple-400" },
-                      { label: "Delivered", count: 147, icon: Check, color: "text-green-400" }].map(({ label, count, icon: Icon, color }) => (
+                    {[
+                      { label: "Pending", count: orderCounts.pending, icon: Clock, color: "text-amber-400" },
+                      { label: "Processing", count: orderCounts.processing, icon: Package, color: "text-blue-400" },
+                      { label: "Shipped", count: orderCounts.shipped, icon: TrendingUp, color: "text-purple-400" },
+                      { label: "Delivered", count: orderCounts.delivered, icon: Check, color: "text-green-400" },
+                    ].map(({ label, count, icon: Icon, color }) => (
                       <div key={label} className="p-4 rounded-2xl bg-white/3 border border-white/10">
                         <Icon className={cn("w-5 h-5 mb-2", color)} />
                         <p className="text-2xl font-black text-soft-white">{count}</p>
@@ -701,22 +1002,100 @@ export default function AdminPage() {
                     ))}
                   </div>
                   <div className="rounded-2xl border border-white/10 overflow-hidden">
+                    {ordersError && (
+                      <div className="px-5 py-4 text-sm text-rose-200 bg-rose-500/10">Failed to load orders: {ordersError}</div>
+                    )}
                     <div className="overflow-x-auto">
                       <table className="w-full">
                         <thead><tr className="border-b border-white/10 bg-white/3">{["Order", "Customer", "Product", "Amount", "Status", "Time"].map((h) => (
                           <th key={h} className="px-5 py-3 text-left text-xs text-muted-lavender uppercase">{h}</th>
                         ))}</tr></thead>
                         <tbody className="divide-y divide-white/5">
-                          {RECENT_ORDERS.map((o) => (
-                            <tr key={o.id} className="hover:bg-white/3 transition-colors">
-                              <td className="px-5 py-3 text-lilac text-sm font-mono">{o.id}</td>
-                              <td className="px-5 py-3 text-soft-white text-sm">{o.customer}</td>
-                              <td className="px-5 py-3 text-muted-lavender text-sm">{o.product}</td>
-                              <td className="px-5 py-3 text-soft-white text-sm font-semibold">{formatCurrency(o.amount)}</td>
-                              <td className="px-5 py-3"><span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[o.status])}>{o.status}</span></td>
-                              <td className="px-5 py-3 text-muted-lavender text-xs">{o.date}</td>
+                          {isOrdersLoading ? (
+                            <tr><td colSpan={6} className="px-5 py-6 text-center text-muted-lavender">Loading orders…</td></tr>
+                          ) : adminOrders.length === 0 ? (
+                            <tr><td colSpan={6} className="px-5 py-6 text-center text-muted-lavender">No recent orders available.</td></tr>
+                          ) : adminOrders.map((o) => {
+                            const customerName = o.profiles ? `${o.profiles.first_name} ${o.profiles.last_name}` : o.profiles?.email ?? "Unknown";
+                            const productName = o.order_items?.[0]?.product_name ?? "—";
+                            return (
+                              <tr key={o.id} className="hover:bg-white/3 transition-colors">
+                                <td className="px-5 py-3 text-lilac text-sm font-mono">{o.id}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm">{customerName}</td>
+                                <td className="px-5 py-3 text-muted-lavender text-sm">{productName}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm font-semibold">{formatCurrency(o.grand_total)}</td>
+                                <td className="px-5 py-3"><span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[o.status] ?? "bg-white/10 text-white/80")}>{o.status}</span></td>
+                                <td className="px-5 py-3 text-muted-lavender text-xs">{new Date(o.created_at).toLocaleString()}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {/* MANUAL PAYMENTS */}
+              {section === "manual-payments" && (
+                <div className="space-y-5">
+                  <div className="flex items-center justify-between gap-4 flex-wrap">
+                    <div>
+                      <h1 className="text-2xl font-bold text-soft-white">Manual Payment Reviews</h1>
+                      <p className="text-muted-lavender text-sm mt-1">Review submitted bank transfers and approve or reject payments safely.</p>
+                    </div>
+                    <div className="text-sm text-muted-lavender">{manualPaymentOrders.length} payment request(s) awaiting review</div>
+                  </div>
+
+                  <div className="rounded-2xl border border-white/10 overflow-hidden">
+                    {manualPaymentsError && (
+                      <div className="px-5 py-4 text-sm text-rose-200 bg-rose-500/10">Failed to load manual payments: {manualPaymentsError}</div>
+                    )}
+                    <div className="overflow-x-auto">
+                      <table className="w-full">
+                        <thead>
+                          <tr className="border-b border-white/10 bg-white/3">
+                            {[
+                              "Order",
+                              "Customer",
+                              "Amount",
+                              "Status",
+                              "Submitted",
+                              "Reference",
+                              "Actions",
+                            ].map((h) => (
+                              <th key={h} className="px-5 py-3 text-left text-xs text-muted-lavender uppercase">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/5">
+                          {isManualPaymentsLoading ? (
+                            <tr>
+                              <td colSpan={7} className="px-5 py-6 text-center text-muted-lavender">Loading manual payments…</td>
                             </tr>
-                          ))}
+                          ) : manualPaymentOrders.length === 0 ? (
+                            <tr>
+                              <td colSpan={7} className="px-5 py-6 text-center text-muted-lavender">No manual payments pending review.</td>
+                            </tr>
+                          ) : manualPaymentOrders.map((order) => {
+                            const customerName = order.profiles ? `${order.profiles.first_name} ${order.profiles.last_name}` : order.profiles?.email ?? "Unknown";
+                            return (
+                              <tr key={order.id} className="hover:bg-white/3 transition-colors">
+                                <td className="px-5 py-3 text-lilac text-sm font-mono">{order.id}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm">{customerName}</td>
+                                <td className="px-5 py-3 text-soft-white text-sm font-semibold">{formatCurrency(order.grand_total)}</td>
+                                <td className="px-5 py-3"><span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[order.status] ?? "bg-white/10 text-white/80")}>{order.status}</span></td>
+                                <td className="px-5 py-3 text-muted-lavender text-sm">{order.manual_payment_submitted_at ? new Date(order.manual_payment_submitted_at).toLocaleString() : "-"}</td>
+                                <td className="px-5 py-3 text-muted-lavender text-sm">{order.payment_reference ?? "-"}</td>
+                                <td className="px-5 py-3 flex gap-2">
+                                  <button onClick={() => handleManualPaymentAction(order.id, "approve")}
+                                    className="text-xs bg-green-500/10 text-green-400 px-3 py-1.5 rounded-xl hover:bg-green-500/20 transition-colors">Approve</button>
+                                  <button onClick={() => handleManualPaymentAction(order.id, "reject")}
+                                    className="text-xs bg-red-500/10 text-red-400 px-3 py-1.5 rounded-xl hover:bg-red-500/20 transition-colors">Reject</button>
+                                </td>
+                              </tr>
+                            );
+                          })}
                         </tbody>
                       </table>
                     </div>

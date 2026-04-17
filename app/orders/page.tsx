@@ -19,12 +19,14 @@ interface Order {
 }
 
 const STATUS_CONFIG: Record<string, { color: string; bg: string; icon: any; label: string }> = {
-  delivered:  { color: "text-green-400",  bg: "bg-green-500/20",  icon: Check,    label: "Delivered" },
-  shipped:    { color: "text-blue-400",   bg: "bg-blue-500/20",   icon: Truck,    label: "Shipped" },
-  processing: { color: "text-amber-400",  bg: "bg-amber-500/20",  icon: Clock,    label: "Processing" },
-  pending:    { color: "text-lilac",      bg: "bg-lilac/20",      icon: Package2, label: "Pending" },
-  confirmed:  { color: "text-green-300",  bg: "bg-green-500/15",  icon: Check,    label: "Confirmed" },
-  cancelled:  { color: "text-red-400",    bg: "bg-red-500/20",    icon: Package2, label: "Cancelled" },
+  awaiting_payment:  { color: "text-amber-300", bg: "bg-amber-500/15", icon: Clock,    label: "Awaiting Payment" },
+  payment_submitted: { color: "text-blue-300",  bg: "bg-blue-500/15",  icon: Clock,    label: "Payment Submitted" },
+  delivered:         { color: "text-green-400",  bg: "bg-green-500/20",  icon: Check,    label: "Delivered" },
+  shipped:           { color: "text-blue-400",   bg: "bg-blue-500/20",   icon: Truck,    label: "Shipped" },
+  processing:        { color: "text-amber-400",  bg: "bg-amber-500/20",  icon: Clock,    label: "Processing" },
+  pending:           { color: "text-lilac",      bg: "bg-lilac/20",      icon: Package2, label: "Pending" },
+  confirmed:         { color: "text-green-300",  bg: "bg-green-500/15",  icon: Check,    label: "Confirmed" },
+  cancelled:         { color: "text-red-400",    bg: "bg-red-500/20",    icon: Package2, label: "Cancelled" },
 };
 
 function formatDate(iso: string) {
@@ -48,10 +50,10 @@ function OrdersPageInner() {
 
       <div className="max-w-3xl mx-auto px-4 py-6">
         <div className="flex gap-2 mb-6 overflow-x-auto scrollbar-hide pb-1">
-          {["all", "pending", "processing", "shipped", "delivered"].map((f) => (
+          {["all", "pending", "awaiting_payment", "payment_submitted", "processing", "shipped", "delivered"].map((f) => (
             <button key={f} onClick={() => setFilter(f)}
               className={cn("px-4 py-2 rounded-xl text-sm font-medium whitespace-nowrap transition-all capitalize", filter === f ? "bg-lilac text-deep-purple" : "bg-white/5 text-muted-lavender hover:bg-white/10")}>
-              {f}
+              {f.replace(/_/g, " ")}
             </button>
           ))}
         </div>

@@ -14,7 +14,9 @@ do $$ begin create type gadget_type      as enum ('phone','laptop','game','table
 do $$ begin create type jersey_type      as enum ('club','country','nfl','basketball','retro'); exception when duplicate_object then null; end $$;
 do $$ begin create type jersey_category  as enum ('current','retro','special');        exception when duplicate_object then null; end $$;
 do $$ begin create type estate_type      as enum ('house','land','apartment','commercial'); exception when duplicate_object then null; end $$;
-do $$ begin create type order_status     as enum ('pending','confirmed','processing','shipped','delivered','cancelled','refunded'); exception when duplicate_object then null; end $$;
+do $$ begin create type order_status     as enum ('pending','awaiting_payment','payment_submitted','confirmed','processing','shipped','delivered','cancelled','refunded'); exception when duplicate_object then null; end $$;
+do $$ begin alter type order_status add value 'awaiting_payment'; exception when duplicate_object then null; end $$;
+do $$ begin alter type order_status add value 'payment_submitted'; exception when duplicate_object then null; end $$;
 do $$ begin create type swap_status      as enum ('pending','under_review','approved','rejected','completed'); exception when duplicate_object then null; end $$;
 do $$ begin create type product_category as enum ('gadget','jersey','car','realestate'); exception when duplicate_object then null; end $$;
 
@@ -272,6 +274,14 @@ drop trigger if exists orders_updated_at on orders;
 create trigger orders_updated_at before update on orders for each row execute procedure set_updated_at();
 create index if not exists idx_orders_user_id on orders(user_id);
 create index if not exists idx_orders_status  on orders(status);
+alter table orders add column if not exists subtotal_amount numeric not null default 0 check (subtotal_amount >= 0);
+alter table orders add column if not exists discount_amount numeric not null default 0 check (discount_amount >= 0);
+alter table orders add column if not exists delivery_fee numeric not null default 0 check (delivery_fee >= 0);
+alter table orders add column if not exists grand_total numeric not null default 0 check (grand_total >= 0);
+alter table orders add column if not exists currency text not null default 'NGN';
+alter table orders add column if not exists manual_payment_note text;
+alter table orders add column if not exists manual_payment_proof_url text;
+alter table orders add column if not exists manual_payment_submitted_at timestamptz;
 
 -- =============================================================================
 -- ORDER ITEMS
@@ -298,6 +308,96 @@ create policy "order_items: own insert" on order_items for insert
 create policy "order_items: admin all"  on order_items for all
   using (exists (select 1 from profiles where id = auth.uid() and role = 'admin'));
 create index if not exists idx_order_items_order_id on order_items(order_id);
+
+-- =============================================================================
+-- RECEIPTS
+-- =============================================================================
+create table if not exists receipts (
+  id                uuid         primary key default uuid_generate_v4(),
+  order_id          uuid         references orders(id) on delete set null,
+  user_id           uuid         not null references profiles(id) on delete restrict,
+  receipt_number    text         not null,
+  payment_reference text         not null,
+  customer_name     text         not null default 'Customer',
+  customer_email    text,
+  amount_paid       numeric      not null check (amount_paid >= 0),
+  currency          text         not null default 'NGN',
+  payment_channel   text         not null default 'paystack',
+  payment_date      timestamptz  not null default now(),
+  items_snapshot    jsonb        not null default '[]',
+  status            text         not null default 'paid',
+  created_at        timestamptz  not null default now()
+);
+alter table receipts enable row level security;
+drop policy if exists "receipts: own read" on receipts;
+drop policy if exists "receipts: admin all" on receipts;
+create policy "receipts: own read" on receipts for select using (auth.uid() = user_id);
+create policy "receipts: admin all" on receipts for all
+  using (exists (select 1 from profiles where id = auth.uid() and role = 'admin'));
+create index if not exists idx_receipts_order_id on receipts(order_id);
+create unique index if not exists idx_receipts_reference on receipts(payment_reference);
+create unique index if not exists idx_receipts_number on receipts(receipt_number);
+
+-- =============================================================================
+-- ORDER CREATION PLANNER
+-- =============================================================================
+create or replace function public.create_order_with_items(
+  p_user_id uuid,
+  p_status order_status,
+  p_payment_method text,
+  p_payment_reference text,
+  p_notes text,
+  p_subtotal_amount numeric,
+  p_discount_amount numeric,
+  p_delivery_fee numeric,
+  p_grand_total numeric,
+  p_currency text,
+  p_items json
+)
+returns orders as $$
+declare
+  inserted_order orders%rowtype;
+begin
+  insert into orders(
+    user_id,
+    status,
+    total_amount,
+    subtotal_amount,
+    discount_amount,
+    delivery_fee,
+    grand_total,
+    currency,
+    payment_reference,
+    payment_method,
+    notes
+  ) values (
+    p_user_id,
+    p_status,
+    p_grand_total,
+    p_subtotal_amount,
+    p_discount_amount,
+    p_delivery_fee,
+    p_grand_total,
+    p_currency,
+    p_payment_reference,
+    p_payment_method,
+    p_notes
+  ) returning * into inserted_order;
+
+  insert into order_items(order_id, product_id, product_category, product_name, product_image, unit_price, quantity)
+  select
+    inserted_order.id,
+    item->>'productId',
+    (item->>'productCategory')::product_category,
+    item->>'productName',
+    coalesce(item->>'productImage', ''),
+    (item->>'unitPrice')::numeric,
+    (item->>'quantity')::integer
+  from json_array_elements(p_items) as arr(item);
+
+  return inserted_order;
+end;
+$$ language plpgsql;
 
 -- =============================================================================
 -- CART ITEMS

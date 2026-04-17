@@ -6,11 +6,15 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { ok, created, badRequest, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireAuth } from "@/lib/auth-guard";
+import { createOrderWithItems } from "@/lib/order-service";
+import { createOrderSchema } from "@/lib/validators";
 import type { Database } from "@/types/database";
 
-type OrderItemInsert = Database["public"]["Tables"]["order_items"]["Insert"];
-type ProductCategory = OrderItemInsert["product_category"];
-const ALLOWED_PRODUCT_CATEGORIES: ProductCategory[] = ["gadget", "jersey", "car", "realestate"];
+const VALID_ORDER_STATUSES = [
+  "pending", "awaiting_payment", "payment_submitted", "confirmed", "processing", "shipped", "delivered", "cancelled", "refunded",
+] as const;
+
+type OrderStatus = (typeof VALID_ORDER_STATUSES)[number];
 
 export async function GET(req: NextRequest) {
   try {
@@ -19,18 +23,24 @@ export async function GET(req: NextRequest) {
 
     const { searchParams } = new URL(req.url);
     const { page, pageSize, from, to } = parsePagination(searchParams);
+    const statusParam = searchParams.get("status");
+    const status = VALID_ORDER_STATUSES.includes(statusParam as OrderStatus) ? statusParam : null;
 
-    const { data, error: queryError, count } = await supabase!
+    let query = supabase!
       .from("orders")
       .select("*, order_items(*)", { count: "exact" })
       .eq("user_id", user!.id)
-      .order("created_at", { ascending: false })
-      .range(from, to);
+      .order("created_at", { ascending: false });
+
+    if (status) query = query.eq("status", status);
+
+    const { data, error: queryError, count } = await query.range(from, to);
 
     if (queryError) return serverError(queryError);
 
     return withMeta(data, {
-      page, pageSize,
+      page,
+      pageSize,
       total: count ?? 0,
       totalPages: Math.ceil((count ?? 0) / pageSize),
     });
@@ -41,77 +51,15 @@ export async function GET(req: NextRequest) {
 
 export async function POST(req: NextRequest) {
   try {
-    const { user, supabase, error } = await requireAuth();
+    const { user, error } = await requireAuth();
     if (error) return error;
 
     const body = await req.json();
-    const { items, paymentMethod, paymentReference, notes } = body as {
-      items: Array<{
-        productId: string;
-        productCategory: ProductCategory;
-        productName: string;
-        productImage: string;
-        unitPrice: number;
-        quantity: number;
-      }>;
-      paymentMethod?: string;
-      paymentReference?: string;
-      notes?: string;
-    };
+    const parsed = createOrderSchema.safeParse(body);
+    if (!parsed.success) return badRequest(parsed.error.errors.map((err) => err.message).join(", "));
 
-    if (!items || items.length === 0) {
-      return badRequest("Order must contain at least one item");
-    }
-
-    const invalidCategory = items.find(
-      (item) => !ALLOWED_PRODUCT_CATEGORIES.includes(item.productCategory)
-    );
-    if (invalidCategory) {
-      return badRequest(`Invalid product category: ${invalidCategory.productCategory}`);
-    }
-
-    const totalAmount = items.reduce(
-      (sum, item) => sum + item.unitPrice * item.quantity,
-      0
-    );
-
-    // Create order + items in a single transaction via Supabase RPC
-    const { data: order, error: orderError } = await supabase!
-      .from("orders")
-      .insert({
-        user_id: user!.id,
-        status: "pending",
-        total_amount: totalAmount,
-        payment_method: paymentMethod ?? null,
-        payment_reference: paymentReference ?? null,
-        notes: notes ?? null,
-      })
-      .select()
-      .single();
-
-    if (orderError) return serverError(orderError);
-
-    const orderItems: OrderItemInsert[] = items.map((item) => ({
-      order_id: order.id,
-      product_id: item.productId,
-      product_category: item.productCategory,
-      product_name: item.productName,
-      product_image: item.productImage,
-      unit_price: item.unitPrice,
-      quantity: item.quantity,
-      subtotal: item.unitPrice * item.quantity,
-    }));
-
-    const { error: itemsError } = await supabase!
-      .from("order_items")
-      .insert(orderItems);
-
-    if (itemsError) return serverError(itemsError);
-
-    // Clear the user's cart after successful order
-    await supabase!.from("cart_items").delete().eq("user_id", user!.id);
-
-    return created({ ...order, items: orderItems }, "Order placed successfully");
+    const { order } = await createOrderWithItems(user!.id, parsed.data);
+    return created(order, "Order placed successfully");
   } catch (err) {
     return serverError(err);
   }

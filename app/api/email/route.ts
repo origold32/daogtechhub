@@ -1,8 +1,18 @@
 import { NextResponse } from "next/server";
 import { Resend } from "resend";
+import { getClientIp, apiLimiter } from "@/lib/rate-limit";
 
 export async function POST(req: Request) {
   try {
+    const ip = getClientIp(req.headers);
+    const limit = apiLimiter.check(ip);
+    if (!limit.success) {
+      return NextResponse.json(
+        { error: `Rate limit exceeded. Retry after ${Math.ceil((limit.reset - Date.now()) / 1000)}s` },
+        { status: 429 },
+      );
+    }
+
     const resend = new Resend(process.env.RESEND_API_KEY);
     const { name, email, product, message } = await req.json();
 

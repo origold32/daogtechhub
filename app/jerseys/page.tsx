@@ -24,6 +24,23 @@ export default function JerseysPage() {
   const router = useRouter();
   const [selectedSizes, setSelectedSizes] = useState<Record<string, string>>({});
 
+  const recordAnalyticsEvent = async (jersey: ReturnType<typeof normaliseJersey>) => {
+    try {
+      await fetch("/api/analytics/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: "add_to_cart",
+          productId: jersey.id,
+          productCategory: "jersey",
+          metadata: { productName: jersey.name },
+        }),
+      });
+    } catch {
+      // ignore analytics failures
+    }
+  };
+
   const params = new URLSearchParams();
   if (jerseySearch) params.set("search", jerseySearch);
   if (jerseyType !== "all") params.set("type", jerseyType);
@@ -36,6 +53,7 @@ export default function JerseysPage() {
     e.stopPropagation();
     const sz = selectedSizes[jersey.id] ?? jersey.size[0];
     addItem({ id: jersey.id, name: jersey.name, price: jersey.price, image: jersey.image, category: "jersey", size: sz });
+    void recordAnalyticsEvent(jersey);
     toast.success(`${jersey.name} (${sz}) added to cart!`);
     setCartOpen(true);
   };

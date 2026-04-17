@@ -6,13 +6,17 @@ export const dynamic = "force-dynamic";
 import { NextRequest } from "next/server";
 import { ok, badRequest, serverError } from "@/lib/api-response";
 import { requireAuth, requireRole } from "@/lib/auth-guard";
+import { discountValidationSchema } from "@/lib/validators";
 
 export async function POST(req: NextRequest) {
   try {
     const { user, supabase, error } = await requireAuth();
     if (error) return error;
 
-    const { code, cartTotal } = await req.json() as { code: string; cartTotal: number };
+    const body = await req.json();
+    const parsed = discountValidationSchema.safeParse(body);
+    if (!parsed.success) return badRequest(parsed.error.errors.map((err) => err.message).join(", "));
+    const { code, cartTotal } = parsed.data;
     if (!code?.trim()) return badRequest("Discount code is required");
 
     const { data: discount, error: dbErr } = await supabase!

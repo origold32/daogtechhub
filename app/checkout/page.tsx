@@ -56,6 +56,12 @@ function CheckoutPageInner() {
   const [discount,    setDiscount]    = useState<{ discountAmount: number; code: string; description: string } | null>(null);
   const [discountLoading, setDiscountLoading] = useState(false);
   const [errors,      setErrors]      = useState<Record<string, string>>({});
+  const [manualOrder, setManualOrder] = useState<{ id: string; payment_reference?: string | null } | null>(null);
+  const [transferNote, setTransferNote] = useState("");
+  const [proofUrl, setProofUrl] = useState("");
+  const [manualSubmitting, setManualSubmitting] = useState(false);
+  const [manualSubmitted, setManualSubmitted] = useState(false);
+  const [manualMessage, setManualMessage] = useState("");
   const [form, setForm] = useState({
     firstName: user?.firstName ?? "", lastName: user?.lastName  ?? "",
     email: user?.email ?? "", phone: user?.phone ?? "",
@@ -114,44 +120,40 @@ function CheckoutPageInner() {
           productImage: i.image, unitPrice: i.price, quantity: i.quantity,
         })),
         paymentMethod: payMethod,
+        discountAmount: discount?.discountAmount ?? 0,
         notes: `Delivery: ${form.address}, ${form.city}, ${form.state}. Phone: ${form.phone}.${discount ? ` Discount: ${discount.code}` : ""}`,
       }),
     });
     const json = await res.json();
     if (!json.success) throw new Error(json.error ?? "Order creation failed");
-    return json.data?.id ?? null;
+    return json.data;
   }
 
   async function handlePay() {
     if (!validate()) { setStep(1); return; }
     setLoading(true);
     try {
-      const orderId = await createOrder();
-      if (!orderId) throw new Error("No order ID returned");
+      const order = await createOrder();
+      if (!order?.id) throw new Error("No order ID returned");
 
       if (payMethod === "paystack") {
-        // Initialize Paystack transaction
         const res = await fetch("/api/payment/initialize", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           credentials: "include",
           body: JSON.stringify({
-            amount: total,
             email: form.email,
-            orderId,
-            items: items.map((i) => ({ name: i.name, qty: i.quantity, price: i.price })),
-            deliveryNote: `${form.address}, ${form.city}, ${form.state}`,
+            orderId: order.id,
           }),
         });
         const json = await res.json();
         if (!json.success) throw new Error(json.error ?? "Payment init failed");
-        // Redirect to Paystack hosted page
         window.location.href = json.data.authorizationUrl;
         return;
       }
 
-      // Manual payment methods — show success with order reference
       clearCart();
+      setManualOrder({ id: order.id, payment_reference: order.payment_reference });
       setStep(3);
     } catch (err) {
       toast.error((err as Error).message ?? "Failed to place order");
@@ -309,19 +311,91 @@ function CheckoutPageInner() {
             </motion.div>
           )}
 
-          {/* ── Step 3: Success (manual payment only) ── */}
           {step === 3 && (
-            <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="text-center space-y-6 py-8">
-              <div className="w-20 h-20 rounded-full bg-green-500/15 border border-green-500/30 flex items-center justify-center mx-auto">
-                <Check size={36} className="text-green-400" />
+            <motion.div key="step3" initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} className="space-y-6 py-8">
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6">
+                <div className="flex items-center justify-center mb-4">
+                  <div className="w-20 h-20 rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center mx-auto">
+                    <ShieldCheck size={36} className="text-amber-300" />
+                  </div>
+                </div>
+                <div className="text-center">
+                  <h2 className="text-white font-bold text-xl">Manual Payment Instructions</h2>
+                  <p className="text-white/45 text-sm mt-2">Your order has been placed and is awaiting payment confirmation.</p>
+                </div>
+
+                <div className="mt-6 grid gap-3 sm:grid-cols-2">
+                  <div className="rounded-2xl bg-[#1d133b] p-4 text-left">
+                    <p className="text-xs uppercase text-white/40 mb-2">Bank</p>
+                    <p className="text-sm text-white font-semibold">First Bank</p>
+                    <p className="text-xs text-white/50 mt-1">Account name: DAOG Tech Hub</p>
+                    <p className="text-xs text-white/50">Account number: 1234567890</p>
+                  </div>
+                  <div className="rounded-2xl bg-[#1d133b] p-4 text-left">
+                    <p className="text-xs uppercase text-white/40 mb-2">Order Reference</p>
+                    <p className="text-sm text-white font-semibold">{manualOrder?.payment_reference ?? manualOrder?.id}</p>
+                    <p className="text-xs text-white/50 mt-1">Use this reference when making the transfer.</p>
+                  </div>
+                </div>
               </div>
-              <div>
-                <h2 className="text-white font-bold text-xl">Order Placed!</h2>
-                <p className="text-white/45 text-sm mt-2">We&apos;ve received your order and will contact you via WhatsApp to confirm delivery.</p>
+
+              <div className="rounded-3xl border border-white/10 bg-white/[0.03] p-6 space-y-4">
+                <div className="space-y-2">
+                  <label className="block text-[11px] text-white/40 font-medium tracking-widest uppercase">Transfer note</label>
+                  <textarea
+                    value={transferNote}
+                    onChange={(e) => setTransferNote(e.target.value)}
+                    rows={4}
+                    className="w-full rounded-2xl border border-white/[0.1] bg-white/[0.04] p-3 text-sm text-white outline-none focus:border-white/25"
+                    placeholder="Notes about your transfer, account name, reference used, or deposit details"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <label className="block text-[11px] text-white/40 font-medium tracking-widest uppercase">Proof URL (optional)</label>
+                  <input
+                    value={proofUrl}
+                    onChange={(e) => setProofUrl(e.target.value)}
+                    className="w-full h-11 rounded-2xl border border-white/[0.1] bg-white/[0.04] px-3 text-sm text-white outline-none focus:border-white/25"
+                    placeholder="https://example.com/receipt.jpg"
+                  />
+                </div>
+                <button
+                  onClick={async () => {
+                    if (!manualOrder?.id) return;
+                    if (!transferNote.trim()) {
+                      setManualMessage("Please describe your transfer to help our team verify it.");
+                      return;
+                    }
+
+                    setManualSubmitting(true);
+                    setManualMessage("");
+                    try {
+                      const res = await fetch("/api/payment/manual-submit", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ orderId: manualOrder.id, note: transferNote, proofUrl: proofUrl?.trim() || undefined }),
+                      });
+                      const json = await res.json();
+                      if (!json.success) throw new Error(json.error ?? "Submission failed");
+                      setManualSubmitted(true);
+                      setManualMessage(json.message ?? "Manual payment submitted successfully.");
+                    } catch (err) {
+                      setManualMessage((err as Error).message ?? "Failed to submit payment details.");
+                    } finally {
+                      setManualSubmitting(false);
+                    }
+                  }}
+                  disabled={manualSubmitting}
+                  className="w-full h-12 rounded-xl bg-[#d4a5ff] text-[#1a0b2e] font-bold text-sm hover:bg-[#c990ff] transition-all disabled:opacity-50"
+                >
+                  {manualSubmitting ? "Submitting…" : "Submit transfer details"}
+                </button>
+                {manualMessage ? <p className="text-xs text-white/60">{manualMessage}</p> : null}
               </div>
+
               <div className="flex gap-3 justify-center">
-                <Link href="/orders" className="h-11 px-6 rounded-xl bg-[#d4a5ff] text-[#1a0b2e] font-bold text-sm flex items-center hover:bg-[#c990ff] transition-all">View Orders</Link>
-                <Link href="/" className="h-11 px-6 rounded-xl border border-white/[0.12] text-white/60 text-sm font-medium flex items-center hover:bg-white/[0.05] transition-all">Home</Link>
+                <Link href="/orders" className="h-11 px-6 rounded-xl bg-[#d4a5ff] text-[#1a0b2e] font-bold text-sm flex items-center justify-center hover:bg-[#c990ff] transition-all">View Orders</Link>
+                <Link href="/" className="h-11 px-6 rounded-xl border border-white/[0.12] text-white/60 text-sm font-medium flex items-center justify-center hover:bg-white/[0.05] transition-all">Home</Link>
               </div>
             </motion.div>
           )}

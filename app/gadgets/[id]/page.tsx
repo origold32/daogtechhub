@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import Image from "next/image";
 import { motion, AnimatePresence } from "framer-motion";
 import { ChevronLeft, ChevronRight, ShoppingCart, Heart, Star, Share2, Shield, Truck, RotateCcw, MessageCircle, Copy, Check, Zap, ArrowRightLeft, ZoomIn, BadgeCheck } from "lucide-react";
@@ -22,6 +22,29 @@ export default function GadgetDetailPage({ params }: { params: { id: string } })
   const router = useRouter();
   const { data: raw, loading, error } = useFetchOne<ApiGadget>(`/api/gadgets/${id}`);
   const gadget = raw ? normaliseGadget(raw) : null;
+
+  const recordAnalyticsEvent = async (eventType: "product_view" | "add_to_cart") => {
+    if (!gadget) return;
+    try {
+      await fetch("/api/analytics/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType,
+          productId: gadget.id,
+          productCategory: "gadget",
+          metadata: { productName: gadget.name },
+        }),
+      });
+    } catch {
+      // analytics failures should not affect user experience
+    }
+  };
+
+  useEffect(() => {
+    if (!gadget) return;
+    void recordAnalyticsEvent("product_view");
+  }, [gadget]);
 
   const { data: relatedRaw } = useFetchProducts<ApiGadget>(`/api/gadgets?pageSize=5`);
   const related = relatedRaw.map(normaliseGadget).filter((g) => g.id !== id).slice(0, 4);
@@ -62,6 +85,7 @@ export default function GadgetDetailPage({ params }: { params: { id: string } })
 
   const handleAddToCart = () => {
     addItem({ id: gadget.id, name: gadget.name, price: gadget.price, image: gadget.image, category: "gadget" });
+    void recordAnalyticsEvent("add_to_cart");
     toast.success(`${gadget.name} added to cart!`); setCartOpen(true);
   };
 

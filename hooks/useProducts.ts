@@ -43,30 +43,49 @@ export function normaliseRealEstate(r: ApiRealEstate) {
 
 type FetchState<T> = { data: T[]; loading: boolean; error: string | null; total: number };
 
-export function useFetchProducts<T>(url: string): FetchState<T> & { refetch: () => void } {
-  const [state, setState] = useState<FetchState<T>>({ data: [], loading: true, error: null, total: 0 });
+export function useFetchProducts<T>(url: string, enabled = true): FetchState<T> & { refetch: () => void } {
+  const [state, setState] = useState<FetchState<T>>({ data: [], loading: enabled, error: null, total: 0 });
 
   const fetchData = useCallback(async () => {
-    setState(s => ({ ...s, loading: true, error: null }));
+    if (!enabled) return;
+    setState((s) => ({ ...s, loading: true, error: null }));
     try {
       const res = await fetch(url, { cache: "no-store", credentials: "include" });
       const json = await res.json();
       if (!json.success) throw new Error(json.error ?? "Failed to fetch");
       setState({ data: json.data ?? [], loading: false, error: null, total: json.meta?.total ?? (json.data?.length ?? 0) });
     } catch (err) {
-      setState(s => ({ ...s, loading: false, error: (err as Error).message }));
+      setState((s) => ({ ...s, loading: false, error: (err as Error).message }));
     }
-  }, [url]);
+  }, [url, enabled]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    if (!enabled) {
+      setState({ data: [], loading: false, error: null, total: 0 });
+      return;
+    }
+    fetchData();
+  }, [fetchData, enabled]);
 
   return { ...state, refetch: fetchData };
 }
 
-export function useFetchOne<T>(url: string): { data: T | null; loading: boolean; error: string | null } {
-  const [state, setState] = useState<{ data: T | null; loading: boolean; error: string | null }>({
-    data: null, loading: true, error: null,
-  });
+export function useFetchOne<T>(url: string): { data: T | null; loading: boolean; error: string | null; mutate: () => Promise<void> } {
+  const [state, setState] = useState<{ data: T | null; loading: boolean; error: string | null }>(
+    { data: null, loading: true, error: null },
+  );
+
+  const mutate = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const res = await fetch(url, { cache: "no-store", credentials: "include" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? "Not found");
+      setState({ data: json.data, loading: false, error: null });
+    } catch (err) {
+      setState({ data: null, loading: false, error: (err as Error).message });
+    }
+  }, [url]);
 
   useEffect(() => {
     let cancelled = false;
@@ -84,5 +103,5 @@ export function useFetchOne<T>(url: string): { data: T | null; loading: boolean;
     return () => { cancelled = true; };
   }, [url]);
 
-  return state;
+  return { ...state, mutate };
 }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Image from "next/image";
 import { motion } from "framer-motion";
 import { ChevronLeft, ShoppingCart, Heart, Star, Shield, Truck, RotateCcw, MessageCircle, Copy, Check, Shirt, BadgeCheck } from "lucide-react";
@@ -21,6 +21,29 @@ export default function JerseyDetailPage({ params }: { params: { id: string } })
   const { data: raw, loading, error } = useFetchOne<ApiJersey>(`/api/jerseys/${id}`);
   const jersey = raw ? normaliseJersey(raw) : null;
   const { data: relatedRaw } = useFetchProducts<ApiJersey>(`/api/jerseys?pageSize=5`);
+
+  const recordAnalyticsEvent = async (eventType: "product_view" | "add_to_cart") => {
+    if (!jersey) return;
+    try {
+      await fetch("/api/analytics/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType,
+          productId: jersey.id,
+          productCategory: "jersey",
+          metadata: { productName: jersey.name },
+        }),
+      });
+    } catch {
+      // ignore analytics errors
+    }
+  };
+
+  useEffect(() => {
+    if (!jersey) return;
+    void recordAnalyticsEvent("product_view");
+  }, [jersey]);
   const related = relatedRaw.map(normaliseJersey).filter((j) => j.id !== id).slice(0, 4);
 
   const { addItem, isInWishlist, addToWishlist, removeFromWishlist, setCartOpen } = useCartStore();
@@ -46,6 +69,7 @@ export default function JerseyDetailPage({ params }: { params: { id: string } })
 
   const handleAddToCart = () => {
     addItem({ id: jersey.id, name: jersey.name, price: jersey.price, image: jersey.image, category: "jersey", size: sz });
+    void recordAnalyticsEvent("add_to_cart");
     toast.success(`${jersey.name} (${sz}) added to cart!`); setCartOpen(true);
   };
 

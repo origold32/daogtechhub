@@ -15,7 +15,7 @@ pnpm install
 
 # 3. Configure environment
 cp .env.local.example .env.local
-# Fill in your Supabase + Paystack keys
+# Fill in your Supabase, Paystack, and email / site settings
 
 # 4. Run database migrations
 # → Paste supabase/PATCH.sql into Supabase SQL Editor and run
@@ -70,6 +70,18 @@ app/
    - `PAYSTACK_SECRET_KEY=sk_live_...`
    - `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY=pk_live_...`
 4. Register webhook URL: `https://yourdomain.com/api/payment/webhook`
+
+## 🔧 Required environment variables
+
+Add or confirm the following values in `.env.local`:
+
+- `NEXT_PUBLIC_SUPABASE_URL`
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `NEXT_PUBLIC_SITE_URL`
+- `PAYSTACK_SECRET_KEY`
+- `NEXT_PUBLIC_PAYSTACK_PUBLIC_KEY`
+- `RESEND_API_KEY` (optional, for email notifications)
 
 ## 🔐 Security Features
 

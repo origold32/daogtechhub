@@ -33,6 +33,23 @@ function GadgetCard({ gadget }: { gadget: Gadget }) {
   const [tilt, setTilt] = useState({ x: 0, y: 0 });
   const inWishlist = isInWishlist(gadget.id);
 
+  const recordAnalyticsEvent = async () => {
+    try {
+      await fetch("/api/analytics/log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          eventType: "add_to_cart",
+          productId: gadget.id,
+          productCategory: "gadget",
+          metadata: { productName: gadget.name },
+        }),
+      });
+    } catch {
+      // ignore analytics failures
+    }
+  };
+
   const handleMouseMove = (e: React.MouseEvent) => {
     const rect = cardRef.current?.getBoundingClientRect();
     if (!rect) return;
@@ -42,6 +59,7 @@ function GadgetCard({ gadget }: { gadget: Gadget }) {
   const handleAddToCart = (e: React.MouseEvent) => {
     e.stopPropagation();
     addItem({ id: gadget.id, name: gadget.name, price: gadget.price, image: gadget.image, category: "gadget" });
+    void recordAnalyticsEvent();
     toast.success(`${gadget.name} added to cart!`);
     setCartOpen(true);
   };
