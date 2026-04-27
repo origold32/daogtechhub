@@ -79,7 +79,8 @@
     "tailwindcss-animate": "^1.0.7",
     "vaul": "^0.9.1",
     "zustand": "^5.0.11",
-    "use-debounce": "^10.0.0"
+    "use-debounce": "^10.0.0",
+    "zod": "^3.22.4"
   },
   "devDependencies": {
     "@types/node": "^20",

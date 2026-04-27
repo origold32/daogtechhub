@@ -80,18 +80,26 @@ export async function POST(req: NextRequest) {
   }
 }
 
-export async function DELETE() {
+export async function DELETE(req: NextRequest) {
   try {
     const { user, supabase, error } = await requireAuth();
     if (error) return error;
 
-    const { error: deleteError } = await supabase!
+    const productId = req.nextUrl.searchParams.get('productId');
+
+    let query = supabase!
       .from("cart_items")
       .delete()
       .eq("user_id", user!.id);
 
+    if (productId) {
+      query = query.eq("product_id", productId);
+    }
+
+    const { error: deleteError } = await query;
+
     if (deleteError) return serverError(deleteError);
-    return ok({ cleared: true }, "Cart cleared");
+    return ok({ cleared: !productId, productId }, productId ? "Item removed from cart" : "Cart cleared");
   } catch (err) {
     return serverError(err);
   }

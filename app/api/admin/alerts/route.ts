@@ -3,6 +3,8 @@ import { ok, serverError } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
 import { createServiceRoleClient } from "@/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireRole("admin");

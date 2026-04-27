@@ -13,6 +13,7 @@ export const createOrderSchema = z.object({
   items: z.array(orderItemSchema).min(1),
   paymentMethod: z.enum(["paystack", "transfer", "ussd"]),
   discountAmount: z.number().nonnegative().default(0),
+  discountCode: z.string().optional(),
   notes: z.string().max(1000).optional().nullable(),
 });
 

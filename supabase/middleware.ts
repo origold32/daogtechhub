@@ -56,8 +56,8 @@ export async function updateSession(request: NextRequest) {
 
   if (pathname.startsWith("/admin") && user && !userError) {
     const { data: profile } = await supabase
-      .from("profiles").select("role").eq("id", user.id).single();
-    if (profile?.role !== "admin") {
+      .from("profiles").select("role, is_active").eq("id", user.id).single();
+    if (profile?.role !== "admin" || profile?.is_active !== true) {
       return NextResponse.redirect(new URL("/", request.url));
     }
   }

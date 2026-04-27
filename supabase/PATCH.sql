@@ -48,6 +48,7 @@ alter table profiles add column if not exists address_line2 text;
 alter table profiles add column if not exists city          text;
 alter table profiles add column if not exists state         text;
 alter table profiles add column if not exists country       text default 'Nigeria';
+alter table profiles add column if not exists is_active     boolean not null default true;
 alter table profiles add column if not exists postal_code   text;
 alter table profiles add column if not exists bio           text;
 alter table profiles add column if not exists is_verified   boolean not null default false;
@@ -484,6 +485,127 @@ create policy "analytics_events: admin read"           on analytics_events for s
   using (exists (select 1 from profiles where id = auth.uid() and role = 'admin'));
 create index if not exists idx_analytics_event_type on analytics_events(event_type);
 create index if not exists idx_analytics_created    on analytics_events(created_at desc);
+
+-- =============================================================================
+-- PAYMENT PROCESSING FUNCTION (fixes race condition)
+-- =============================================================================
+create or replace function process_payment(
+  p_order_id uuid,
+  p_payment_reference text,
+  p_amount_paid numeric,
+  p_currency text,
+  p_channel text,
+  p_paid_at text,
+  p_customer_name text,
+  p_customer_email text,
+  p_items_snapshot json
+) returns json as $$
+declare
+  v_existing_receipt receipts%rowtype;
+  v_order orders%rowtype;
+  v_receipt_number text;
+  v_receipt_id uuid;
+begin
+  -- Check if receipt already exists (atomic due to unique constraint)
+  select * into v_existing_receipt from receipts where payment_reference = p_payment_reference;
+  if found then
+    return json_build_object('status', 'already_confirmed', 'receipt_id', v_existing_receipt.id, 'receipt_number', v_existing_receipt.receipt_number);
+  end if;
+
+  -- Get order
+  select * into v_order from orders where id = p_order_id;
+  if not found then
+    return json_build_object('status', 'order_not_found');
+  end if;
+
+  -- Update order if not already confirmed
+  if v_order.status in ('pending', 'awaiting_payment', 'payment_submitted', 'processing') then
+    update orders set status = 'confirmed', payment_reference = p_payment_reference, payment_method = coalesce(p_channel, v_order.payment_method, 'paystack') where id = p_order_id;
+  end if;
+
+  -- Generate receipt number
+  v_receipt_number := 'RCP-' || extract(epoch from now())::text || '-' || upper(substring(md5(random()::text) from 1 for 6));
+
+  -- Insert receipt
+  insert into receipts(
+    order_id,
+    user_id,
+    receipt_number,
+    payment_reference,
+    customer_name,
+    customer_email,
+    amount_paid,
+    currency,
+    payment_channel,
+    payment_date,
+    items_snapshot,
+    status
+  ) values (
+    p_order_id,
+    v_order.user_id,
+    v_receipt_number,
+    p_payment_reference,
+    p_customer_name,
+    p_customer_email,
+    p_amount_paid,
+    p_currency,
+    p_channel,
+    p_paid_at::timestamptz,
+    p_items_snapshot,
+    'paid'
+  ) returning id into v_receipt_id;
+
+  return json_build_object('status', 'confirmed', 'receipt_id', v_receipt_id, 'receipt_number', v_receipt_number);
+end;
+$$ language plpgsql;
+
+-- =============================================================================
+-- CART SYNC FUNCTION (fixes race condition)
+-- =============================================================================
+create or replace function sync_cart_items(
+  p_user_id uuid,
+  p_items json
+) returns void as $$
+begin
+  -- Insert or update cart items, taking the maximum quantity
+  insert into cart_items(user_id, product_id, product_category, product_name, product_image, unit_price, quantity)
+  select
+    p_user_id,
+    item->>'product_id',
+    (item->>'product_category')::product_category,
+    item->>'product_name',
+    coalesce(item->>'product_image', ''),
+    (item->>'unit_price')::numeric,
+    (item->>'quantity')::integer
+  from json_array_elements(p_items) as arr(item)
+  on conflict (user_id, product_id) do update set
+    quantity = greatest(cart_items.quantity, excluded.quantity),
+    product_name = excluded.product_name,
+    product_image = excluded.product_image,
+    unit_price = excluded.unit_price;
+end;
+$$ language plpgsql;
+
+-- =============================================================================
+-- ADMIN AUDIT LOG
+-- =============================================================================
+create table if not exists admin_audit_log (
+  id               uuid primary key default uuid_generate_v4(),
+  admin_id         uuid references profiles(id) on delete set null,
+  action           text not null, -- e.g., 'update_order_status', 'approve_manual_payment'
+  resource_type    text not null, -- e.g., 'order', 'payment'
+  resource_id      text not null, -- e.g., order_id
+  old_value        jsonb,
+  new_value        jsonb,
+  metadata         jsonb, -- additional context
+  created_at       timestamptz not null default now()
+);
+alter table admin_audit_log enable row level security;
+drop policy if exists "admin_audit_log: admin all" on admin_audit_log;
+create policy "admin_audit_log: admin all" on admin_audit_log for all
+  using (exists (select 1 from profiles where id = auth.uid() and role = 'admin' and is_active = true));
+create index if not exists idx_admin_audit_log_created_at on admin_audit_log(created_at desc);
+create index if not exists idx_admin_audit_log_resource on admin_audit_log(resource_type, resource_id);
 
 -- =============================================================================
 -- BACKFILL: profiles for any users who signed up before this ran

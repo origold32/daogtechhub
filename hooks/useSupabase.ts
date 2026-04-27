@@ -200,7 +200,7 @@ export function useSessionHydration() {
 
 export function useCartSync() {
   const { user } = useAuthStore();
-  const { addItem } = useCartStore();
+  const { addItem, updateQuantity } = useCartStore();
   const synced = useRef<string | null>(null);
 
   useEffect(() => {
@@ -211,15 +211,20 @@ export function useCartSync() {
 
     const localItems = useCartStore.getState().items;
 
-    Promise.resolve(
+    // Fetch server items and merge with local
+    void Promise.resolve(
       supabase
         .from("cart_items")
         .select("*")
         .eq("user_id", user.id)
     )
-      .then(({ data: serverItems }) => {
-        serverItems?.forEach((s: any) => {
-          if (!localItems.some((l) => l.id === s.product_id)) {
+      .then(async ({ data: serverItems }) => {
+        if (!serverItems) return;
+
+        // Add server items to local if not present
+        serverItems.forEach((s: any) => {
+          const localItem = localItems.find((l) => l.id === s.product_id);
+          if (!localItem) {
             addItem({
               id: s.product_id,
               name: s.product_name,
@@ -227,33 +232,60 @@ export function useCartSync() {
               image: s.product_image,
               category: s.product_category,
             });
-
-            if (s.quantity > 1) {
-              useCartStore.getState().updateQuantity(s.product_id, s.quantity);
+            updateQuantity(s.product_id, s.quantity);
+          } else {
+            // Merge quantity: take maximum
+            const maxQty = Math.max(localItem.quantity, s.quantity);
+            if (maxQty !== localItem.quantity) {
+              updateQuantity(s.product_id, maxQty);
             }
           }
         });
+
+        // Now sync the merged local items to server
+        const mergedItems = useCartStore.getState().items.map((i) => ({
+          product_id: i.id,
+          product_category: i.category,
+          product_name: i.name,
+          product_image: i.image ?? "",
+          unit_price: i.price,
+          quantity: i.quantity,
+        }));
+
+        if (mergedItems.length > 0) {
+          await supabase.rpc("sync_cart_items", {
+            p_user_id: user.id,
+            p_items: mergedItems,
+          });
+        }
       })
-      .catch(() => {});
+      .then(undefined, (err: unknown) => console.error("Cart sync error:", err));
+  }, [user, addItem, updateQuantity]);
+}
 
-    if (localItems.length > 0) {
-      const rows = localItems.map((i) => ({
-        user_id: user.id,
-        product_id: i.id,
-        product_category: i.category,
-        product_name: i.name,
-        product_image: i.image ?? "",
-        unit_price: i.price,
-        quantity: i.quantity,
-      }));
+export function useWishlistSync() {
+  const { user } = useAuthStore();
+  const synced = useRef<string | null>(null);
 
-      Promise.resolve(
-        supabase
-          .from("cart_items")
-          .upsert(rows, { onConflict: "user_id,product_id" })
-      ).catch(() => {});
-    }
-  }, [user, addItem]);
+  useEffect(() => {
+    if (!user || synced.current === user.id) return;
+    const supabase = getClient();
+    if (!supabase) return;
+    synced.current = user.id;
+
+    // Sync wishlist from server
+    void supabase
+      .from("wishlists")
+      .select("*")
+      .eq("user_id", user.id)
+      .then(({ data: serverItems }) => {
+        if (serverItems) {
+          // Add to local if not present (assuming wishlist store exists)
+          // For now, assume wishlist is in localStorage or store
+          // TODO: Implement wishlist store sync
+        }
+      }, (err: unknown) => console.error("Wishlist sync error:", err));
+  }, [user]);
 }
 
 export function useSupabaseAuth() {

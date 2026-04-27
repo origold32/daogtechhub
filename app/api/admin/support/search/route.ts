@@ -3,6 +3,8 @@ import { ok, badRequest, serverError } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
 import { createServiceRoleClient } from "@/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 export async function GET(req: NextRequest) {
   try {
     const auth = await requireRole("admin");
@@ -28,7 +30,7 @@ export async function GET(req: NextRequest) {
       service
         .from("profiles")
         .select("id,email,first_name,last_name,role,created_at")
-        .ilike("email", `%${q}%")
+        .ilike("email", `%${q}%`)
         .limit(10),
     ]);
 

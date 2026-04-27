@@ -20,6 +20,9 @@ export async function requireAuth() {
 export async function requireRole(...roles: UserRole[]) {
   const auth = await requireAuth();
   if (auth.error) return auth;
+  if (auth.profile && auth.profile.is_active === false) {
+    return { ...auth, error: forbidden("Account is inactive") } as const;
+  }
   if (!auth.profile || !roles.includes(auth.profile.role as UserRole)) {
     return { ...auth, error: forbidden("Insufficient permissions") } as const;
   }

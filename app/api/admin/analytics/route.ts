@@ -3,7 +3,10 @@ import { ok, badRequest, serverError } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
 import { createServiceRoleClient } from "@/supabase/server";
 
+export const dynamic = "force-dynamic";
+
 const ALLOWED_RANGES = ["7d", "30d", "90d"] as const;
+type AnalyticsMetadata = Record<string, string | number | boolean | null | undefined>;
 
 function parseRange(value: string | null) {
   if (!value) return "7d";
@@ -71,16 +74,23 @@ export async function GET(req: NextRequest) {
       if (eventType === "payment_webhook_duplicate") summary.webhookDuplicates += 1;
       if (eventType === "payment_webhook_invalid_signature") summary.invalidSignatures += 1;
 
-      const category = event.product_category ?? event.metadata?.productCategory ?? null;
+      const metadata =
+        event.metadata && typeof event.metadata === "object" && !Array.isArray(event.metadata)
+          ? (event.metadata as AnalyticsMetadata)
+          : null;
+
+      const categoryValue = event.product_category ?? metadata?.productCategory ?? metadata?.product_category ?? null;
+      const category = typeof categoryValue === "string" ? categoryValue : null;
       if (category) {
         categoryMap.set(category, (categoryMap.get(category) ?? 0) + 1);
       }
 
-      const productId = event.product_id ?? event.metadata?.productId ?? event.metadata?.product_id ?? "unknown";
-      const productName = typeof event.metadata?.productName === "string"
-        ? event.metadata.productName
-        : typeof event.metadata?.product_name === "string"
-          ? event.metadata.product_name
+      const productIdValue = event.product_id ?? metadata?.productId ?? metadata?.product_id ?? "unknown";
+      const productId = typeof productIdValue === "string" ? productIdValue : String(productIdValue);
+      const productName = typeof metadata?.productName === "string"
+        ? metadata.productName
+        : typeof metadata?.product_name === "string"
+          ? metadata.product_name
           : productId;
       const key = `${productId}::${productName}`;
       const bucket = productMap.get(key) ?? { name: productName, category, count: 0 };

@@ -43,10 +43,20 @@ export async function POST(req: NextRequest) {
     if (order.user_id !== user!.id) return badRequest("Order does not belong to this account");
     if (order.status !== "pending") return badRequest(`Order is already ${order.status}`);
 
+    const reference = order.payment_reference ?? `pay_${randomUUID().replace(/-/g, "")}`;
+
+    // Atomically update status to prevent concurrent initialization
+    const { error: statusUpdateError } = await supabase!
+      .from("orders")
+      .update({ status: "processing", payment_reference: reference })
+      .eq("id", parsed.data.orderId)
+      .eq("status", "pending");
+
+    if (statusUpdateError) return serverError(statusUpdateError);
+
     const amountKobo = Math.round(Number(order.grand_total) * 100);
     if (amountKobo < 100) return badRequest("Order total is too small to process");
 
-    const reference = order.payment_reference ?? `daog_${parsed.data.orderId}_${randomUUID().replace(/-/g, "").slice(0, 12)}`;
     const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "https://daogtech.vercel.app";
     const callbackUrl = `${siteUrl}/payment/callback`;
 
@@ -74,6 +84,8 @@ export async function POST(req: NextRequest) {
 
     const data = await response.json();
     if (!data.status) {
+      // Revert status on failure
+      await supabase!.from("orders").update({ status: "pending" }).eq("id", parsed.data.orderId);
       console.error("[payment/initialize]", data.message);
       return serverError(data.message ?? "Payment initialization failed");
     }

@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import AuthGuard from "@/components/providers/AuthGuard";
 import { motion, AnimatePresence } from "framer-motion";
 import {
@@ -48,7 +48,7 @@ function CheckoutPageInner() {
   const router = useRouter();
   const { items, getTotalPrice, getTotalItems, clearCart } = useCartStore();
   const { user } = useAuthStore();
-
+  const [isLoading, setIsLoading] = useState(true);
   const [step,        setStep]        = useState<Step>(1);
   const [payMethod,   setPayMethod]   = useState("paystack");
   const [loading,     setLoading]     = useState(false);
@@ -67,6 +67,25 @@ function CheckoutPageInner() {
     email: user?.email ?? "", phone: user?.phone ?? "",
     address: "", city: "", state: "Lagos",
   });
+
+  useEffect(() => {
+    if (user) {
+      // Allow time for cart sync
+      const timer = setTimeout(() => setIsLoading(false), 1500);
+      return () => clearTimeout(timer);
+    }
+  }, [user]);
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-[#0b0718] text-white">
+        <div className="text-center space-y-4">
+          <Loader2 className="w-8 h-8 animate-spin mx-auto" />
+          <p>Loading your cart...</p>
+        </div>
+      </div>
+    );
+  }
 
   const subtotal    = getTotalPrice();
   const discountAmt = discount?.discountAmount ?? 0;
@@ -110,7 +129,7 @@ function CheckoutPageInner() {
     finally { setDiscountLoading(false); }
   }
 
-  async function createOrder(): Promise<string | null> {
+  async function createOrder(): Promise<{ id: string; payment_reference?: string | null } | null> {
     const res = await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -121,6 +140,7 @@ function CheckoutPageInner() {
         })),
         paymentMethod: payMethod,
         discountAmount: discount?.discountAmount ?? 0,
+        discountCode: discount?.code,
         notes: `Delivery: ${form.address}, ${form.city}, ${form.state}. Phone: ${form.phone}.${discount ? ` Discount: ${discount.code}` : ""}`,
       }),
     });

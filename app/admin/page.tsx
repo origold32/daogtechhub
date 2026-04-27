@@ -46,6 +46,9 @@ interface AdminOrder {
   grand_total: number;
   currency: string;
   created_at: string;
+  manual_payment_submitted_at?: string | null;
+  manual_payment_note?: string | null;
+  manual_payment_proof_url?: string | null;
   profiles: { first_name: string; last_name: string; email: string | null } | null;
   order_items: Array<{ product_name: string; quantity: number; unit_price: number }>;
 }
@@ -71,7 +74,7 @@ interface AdminStats {
   };
   lowStock: number;
   unreadNotifications: number;
-  recentOrders: Array<{ id: string; status: string; grand_total: number; created_at: string; profiles: { first_name: string; last_name: string; email: string | null } | null }>;
+  recentOrders: Array<{ id: string; status: string; grand_total: number; created_at: string; profiles: { first_name: string; last_name: string; email: string | null } | null; order_items?: Array<{ product_name: string; quantity: number; unit_price: number }> }>;
   monthlyRevenue: Array<{ m: string; v: number }>;
   categoryBreakdown: Array<{ label: string; count: number }>;
 }
@@ -262,6 +265,14 @@ export default function AdminPage() {
       ]
     : CATEGORY_BREAKDOWN;
 
+  const orderCounts = statsState.data
+    ? {
+        pending: statsState.data.pendingOrders,
+        processing: statsState.data.processingOrders,
+        shipped: statsState.data.shippedOrders,
+        delivered: statsState.data.deliveredOrders,
+      }
+    : { pending: 0, processing: 0, shipped: 0, delivered: 0 };
   const recentOrders = statsState.data?.recentOrders ?? [];
   const adminOrders = ordersState.data ?? [];
   const manualPaymentOrders = manualPaymentsState.data ?? [];
@@ -1013,10 +1024,12 @@ export default function AdminPage() {
                         <tbody className="divide-y divide-white/5">
                           {isOrdersLoading ? (
                             <tr><td colSpan={6} className="px-5 py-6 text-center text-muted-lavender">Loading orders…</td></tr>
-                          ) : adminOrders.length === 0 ? (
-                            <tr><td colSpan={6} className="px-5 py-6 text-center text-muted-lavender">No recent orders available.</td></tr>
                           ) : adminOrders.map((o) => {
-                            const customerName = o.profiles ? `${o.profiles.first_name} ${o.profiles.last_name}` : o.profiles?.email ?? "Unknown";
+                            const customerName = o.profiles
+                              ? ((o.profiles.first_name || o.profiles.last_name)
+                                  ? `${o.profiles.first_name} ${o.profiles.last_name}`.trim()
+                                  : o.profiles.email ?? "Unknown")
+                              : "Unknown";
                             const productName = o.order_items?.[0]?.product_name ?? "—";
                             return (
                               <tr key={o.id} className="hover:bg-white/3 transition-colors">
@@ -1078,7 +1091,11 @@ export default function AdminPage() {
                               <td colSpan={7} className="px-5 py-6 text-center text-muted-lavender">No manual payments pending review.</td>
                             </tr>
                           ) : manualPaymentOrders.map((order) => {
-                            const customerName = order.profiles ? `${order.profiles.first_name} ${order.profiles.last_name}` : order.profiles?.email ?? "Unknown";
+                            const customerName = order.profiles
+                              ? ((order.profiles.first_name || order.profiles.last_name)
+                                  ? `${order.profiles.first_name} ${order.profiles.last_name}`.trim()
+                                  : order.profiles.email ?? "Unknown")
+                              : "Unknown";
                             return (
                               <tr key={order.id} className="hover:bg-white/3 transition-colors">
                                 <td className="px-5 py-3 text-lilac text-sm font-mono">{order.id}</td>

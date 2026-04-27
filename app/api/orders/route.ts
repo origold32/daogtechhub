@@ -32,7 +32,7 @@ export async function GET(req: NextRequest) {
       .eq("user_id", user!.id)
       .order("created_at", { ascending: false });
 
-    if (status) query = query.eq("status", status);
+    if (status) query = query.eq("status", status as Database["public"]["Enums"]["order_status"]);
 
     const { data, error: queryError, count } = await query.range(from, to);
 

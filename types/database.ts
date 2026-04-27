@@ -37,6 +37,7 @@ export interface Database {
           postal_code: string | null;
           bio: string | null;
           is_verified: boolean;
+          is_active: boolean;
           created_at: string;
           updated_at: string;
         };
@@ -56,6 +57,7 @@ export interface Database {
           postal_code?: string | null;
           bio?: string | null;
           is_verified?: boolean;
+          is_active?: boolean;
           created_at?: string;
           updated_at?: string;
         };
@@ -618,6 +620,41 @@ export interface Database {
         ];
       };
 
+      admin_audit_log: {
+        Row: {
+          id: string;
+          admin_id: string;
+          action: string;
+          resource_type: string;
+          resource_id: string;
+          old_value: Json | null;
+          new_value: Json | null;
+          metadata: Json | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          admin_id: string;
+          action: string;
+          resource_type: string;
+          resource_id: string;
+          old_value?: Json | null;
+          new_value?: Json | null;
+          metadata?: Json | null;
+          created_at?: string;
+        };
+        Update: Partial<Database["public"]["Tables"]["admin_audit_log"]["Insert"]>;
+        Relationships: [
+          {
+            foreignKeyName: "admin_audit_log_admin_id_fkey";
+            columns: ["admin_id"];
+            isOneToOne: false;
+            referencedRelation: "profiles";
+            referencedColumns: ["id"];
+          }
+        ];
+      };
+
       // ── analytics_events ───────────────────────────────────────────────────
       analytics_events: {
         Row: {
@@ -669,6 +706,47 @@ export interface Database {
           revenue_this_month: number;
         };
       };
+      create_order_with_items: {
+        Args: {
+          p_user_id: string;
+          p_status: Database["public"]["Enums"]["order_status"];
+          p_payment_method: string;
+          p_payment_reference: string | null;
+          p_notes: string | null;
+          p_subtotal_amount: number;
+          p_discount_amount: number;
+          p_delivery_fee: number;
+          p_grand_total: number;
+          p_currency: string;
+          p_items: Json;
+        };
+        Returns: Database["public"]["Tables"]["orders"]["Row"];
+      };
+      process_payment: {
+        Args: {
+          p_order_id: string;
+          p_payment_reference: string;
+          p_amount_paid: number;
+          p_currency: string;
+          p_channel: string;
+          p_paid_at: string;
+          p_customer_name: string;
+          p_customer_email: string | null;
+          p_items_snapshot: Json;
+        };
+        Returns: {
+          status: string;
+          receipt_id?: string | null;
+          receipt_number?: string | null;
+        };
+      };
+      sync_cart_items: {
+        Args: {
+          p_user_id: string;
+          p_items: Json;
+        };
+        Returns: undefined;
+      };
     };
 
     // Required by @supabase/postgrest-js GenericSchema constraint
@@ -679,7 +757,7 @@ export interface Database {
       jersey_category:     "current" | "retro" | "special";
       car_condition:       "Brand New" | "Used - Like New" | "Used - Excellent" | "Used - Good";
       real_estate_type:    "house" | "land" | "apartment" | "commercial";
-      order_status:        "pending" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
+      order_status:        "pending" | "awaiting_payment" | "payment_submitted" | "confirmed" | "processing" | "shipped" | "delivered" | "cancelled" | "refunded";
       swap_status:         "pending" | "under_review" | "approved" | "rejected" | "completed";
       product_category:    "gadget" | "jersey" | "car" | "realestate";
       receipt_status:      "paid" | "refunded" | "failed";

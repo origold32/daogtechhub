@@ -45,8 +45,8 @@ function GadgetCard({ gadget }: { gadget: Gadget }) {
           metadata: { productName: gadget.name },
         }),
       });
-    } catch {
-      // ignore analytics failures
+    } catch (err) {
+      console.error('Analytics error:', err);
     }
   };
 

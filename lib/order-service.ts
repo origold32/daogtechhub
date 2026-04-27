@@ -28,7 +28,9 @@ export function calculateOrderAmounts(items: OrderItemInput[], discountAmount = 
   const safeDiscountAmount = Math.min(discountAmount, subtotalAmount);
   const deliveryFee = subtotalAmount >= DELIVERY_THRESHOLD ? 0 : DELIVERY_FEE;
   const grandTotal = Math.max(0, subtotalAmount - safeDiscountAmount + deliveryFee);
-  return { subtotalAmount, discountAmount: safeDiscountAmount, deliveryFee, grandTotal };
+  // Round to 2 decimal places to avoid floating-point issues
+  const roundedGrandTotal = Math.round(grandTotal * 100) / 100;
+  return { subtotalAmount, discountAmount: safeDiscountAmount, deliveryFee, grandTotal: roundedGrandTotal };
 }
 
 export function buildManualPaymentReference(): string {
@@ -38,6 +40,63 @@ export function buildManualPaymentReference(): string {
 export async function createOrderWithItems(userId: string, payload: unknown) {
   const parsed = createOrderSchema.parse(payload);
   const service = createServiceRoleClient();
+  type ProductTable = "gadgets" | "jerseys" | "cars" | "real_estates";
+
+  // Validate products exist, have sufficient stock, and prices match
+  for (const item of parsed.items) {
+    let product: any = null;
+    let tableName: ProductTable;
+    switch (item.productCategory) {
+      case 'gadget':
+        tableName = 'gadgets';
+        break;
+      case 'jersey':
+        tableName = 'jerseys';
+        break;
+      case 'car':
+        tableName = 'cars';
+        break;
+      case 'realestate':
+        tableName = 'real_estates';
+        break;
+      default:
+        throw new Error(`Invalid product category: ${item.productCategory}`);
+    }
+
+    const { data, error } = await service.from(tableName).select('*').eq('id', item.productId).single();
+    if (error || !data) {
+      throw new Error(`Product ${item.productId} not found`);
+    }
+    product = data;
+
+    // Check price matches (prevent tampering)
+    if (product.price !== item.unitPrice) {
+      throw new Error(`Price mismatch for product ${item.productId}: expected ${product.price}, got ${item.unitPrice}`);
+    }
+
+    // Check stock if available (assume stock field exists or default to unlimited)
+    const stock = product.stock ?? Infinity;
+    if (stock < item.quantity) {
+      throw new Error(`Insufficient stock for product ${item.productId}: available ${stock}, requested ${item.quantity}`);
+    }
+  }
+
+  // Re-validate discount if code provided
+  if (parsed.discountCode) {
+    const subtotal = parsed.items.reduce((sum, item) => sum + item.unitPrice * item.quantity, 0);
+    const discountRes = await fetch(`${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/api/discount`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: parsed.discountCode, cartTotal: subtotal }),
+    });
+    const discountData = await discountRes.json();
+    if (!discountData.success) {
+      throw new Error(`Discount code invalid: ${discountData.error}`);
+    }
+    if (discountData.data.discountAmount !== parsed.discountAmount) {
+      throw new Error(`Discount amount mismatch: expected ${discountData.data.discountAmount}, got ${parsed.discountAmount}`);
+    }
+  }
 
   const amounts = calculateOrderAmounts(parsed.items, parsed.discountAmount);
   const status = parsed.paymentMethod === "paystack" ? "pending" : "awaiting_payment";

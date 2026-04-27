@@ -101,7 +101,7 @@ export async function processPaystackTransaction(
     return { reference: tx.reference, orderId, status: "invalid", message: "Order does not belong to authenticated user" };
   }
 
-  const expectedAmount = Math.round(Number(order.grand_total ?? order.total_amount) * 100);
+  const expectedAmount = Math.round(Number(order.grand_total) * 100);
   const validation = validateTransactionAmounts(tx.amount, tx.currency, expectedAmount, order.currency ?? EXPECTED_CURRENCY);
 
   if (!validation.valid) {
@@ -110,31 +110,38 @@ export async function processPaystackTransaction(
       user_id: order.user_id,
       type: "order",
       title: "Payment mismatch detected",
-      message: `We received a payment from Paystack for reference ${tx.reference}, but the amount or currency does not match your order. Please contact support.",
+      message: `We received a payment from Paystack for reference ${tx.reference}, but the amount or currency does not match your order. Please contact support.`,
       read: false,
       data: { order_id: orderId, reference: tx.reference },
     });
     return { reference: tx.reference, orderId, status: "amount_mismatch", message: validation.reason };
   }
 
-  const { data: existingReceipt, error: receiptError } = await service
-    .from("receipts")
-    .select("id, receipt_number, status")
-    .eq("payment_reference", tx.reference)
-    .maybeSingle();
+  // Use atomic RPC function to process payment and prevent race conditions
+  const { data: result, error: rpcError } = await service.rpc('process_payment', {
+    p_order_id: orderId,
+    p_payment_reference: tx.reference,
+    p_amount_paid: tx.amount / 100,
+    p_currency: tx.currency ?? EXPECTED_CURRENCY,
+    p_channel: tx.channel ?? "paystack",
+    p_paid_at: tx.paid_at ?? new Date().toISOString(),
+    p_customer_name: tx.metadata?.customer_name ?? buildCustomerName({ email: tx.customer?.email }, null),
+    p_customer_email: tx.customer?.email ?? null,
+    p_items_snapshot: tx.metadata?.items ?? order.order_items ?? [],
+  });
 
-  if (receiptError) {
-    console.error("[payment-service] receipt lookup failed", receiptError);
-    throw receiptError;
+  if (rpcError) {
+    console.error("[payment-service] RPC error", rpcError);
+    throw rpcError;
   }
 
-  if (existingReceipt) {
+  if (result.status === 'already_confirmed') {
     return {
       reference: tx.reference,
       orderId,
       status: "already_confirmed",
-      receiptId: existingReceipt.id,
-      receiptNumber: existingReceipt.receipt_number,
+      receiptId: result.receipt_id,
+      receiptNumber: result.receipt_number,
       amount: tx.amount / 100,
       currency: tx.currency,
       paidAt: tx.paid_at,
@@ -142,57 +149,32 @@ export async function processPaystackTransaction(
     };
   }
 
-  const updatedStatus = ["pending", "awaiting_payment", "payment_submitted"].includes(order.status)
-    ? "confirmed"
-    : order.status;
+  if (result.status === 'confirmed') {
+    await service.from("notifications").insert({
+      user_id: order.user_id,
+      type: "order",
+      title: "Payment confirmed",
+      message: "Your payment of NGN " + (tx.amount / 100).toLocaleString() + " has been received. Receipt: " + result.receipt_number,
+      read: false,
+      data: { order_id: orderId, reference: tx.reference, receipt_number: result.receipt_number },
+    });
 
-  if (updatedStatus === "confirmed" && order.status !== "confirmed") {
-    await service.from("orders").update({
+    return {
+      reference: tx.reference,
+      orderId,
       status: "confirmed",
-      payment_reference: tx.reference,
-      payment_method: tx.channel ?? order.payment_method ?? "paystack",
-    }).eq("id", orderId);
+      receiptId: result.receipt_id,
+      receiptNumber: result.receipt_number,
+      amount: tx.amount / 100,
+      currency: tx.currency,
+      paidAt: tx.paid_at,
+      message: "Payment confirmed",
+    };
   }
 
-  const receiptNumber = `RCP-${Date.now()}-${randomUUID().replace(/-/g, "").slice(0, 6).toUpperCase()}`;
-  const insertResult = await service.from("receipts").insert({
-    order_id: orderId,
-    user_id: order.user_id,
-    receipt_number: receiptNumber,
-    payment_reference: tx.reference,
-    customer_name: tx.metadata?.customer_name ?? buildCustomerName({ email: tx.customer?.email }, null),
-    customer_email: tx.customer?.email ?? null,
-    amount_paid: tx.amount / 100,
-    currency: tx.currency ?? EXPECTED_CURRENCY,
-    payment_channel: tx.channel ?? "paystack",
-    payment_date: tx.paid_at ?? new Date().toISOString(),
-    items_snapshot: tx.metadata?.items ?? order.order_items ?? [],
-    status: "paid",
-  }).select("id, receipt_number").single();
-
-  if (insertResult.error || !insertResult.data) {
-    console.error("[payment-service] failed to create receipt", insertResult.error);
-    throw insertResult.error ?? new Error("Failed to create receipt");
+  if (result.status === 'order_not_found') {
+    return { reference: tx.reference, orderId, status: "not_found", message: "Order not found during processing" };
   }
 
-  await service.from("notifications").insert({
-    user_id: order.user_id,
-    type: "order",
-    title: "Payment confirmed ✓",
-    message: `Your payment of ₦${(tx.amount / 100).toLocaleString()} has been received. Receipt: ${receiptNumber}`,
-    read: false,
-    data: { order_id: orderId, reference: tx.reference, receipt_number: receiptNumber },
-  });
-
-  return {
-    reference: tx.reference,
-    orderId,
-    status: "confirmed",
-    receiptId: insertResult.data.id,
-    receiptNumber,
-    amount: tx.amount / 100,
-    currency: tx.currency,
-    paidAt: tx.paid_at,
-    message: "Payment confirmed",
-  };
+  throw new Error(`Unexpected RPC result: ${JSON.stringify(result)}`);
 }
