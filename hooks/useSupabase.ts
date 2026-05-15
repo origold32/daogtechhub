@@ -379,7 +379,7 @@ export function useSupabaseAuth() {
       }
 
       const verifyingUrl = new URL("/auth/verifying", window.location.origin);
-      verifyingUrl.searchParams.set("next", redirectPath && redirectPath !== "/" ? redirectPath : "/profile");
+      verifyingUrl.searchParams.set("next", redirectPath ? redirectPath : "/");
       verifyingUrl.searchParams.set("oauthProvider", provider);
 
       const { error } = await supabase.auth.signInWithOAuth({

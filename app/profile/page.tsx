@@ -345,6 +345,16 @@ function ProfilePageInner() {
               </button>
             ))}
           </div>
+
+          {user?.role === "admin" && (
+            <button
+              onClick={() => router.push("/admin")}
+              className="mt-4 w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-semibold text-sm"
+            >
+              <Shield size={16} />
+              Go to Admin Panel
+            </button>
+          )}
         </div>
 
         {/* ── Tab navigation ─────────────────────────────────────────── */}

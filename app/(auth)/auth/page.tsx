@@ -40,7 +40,7 @@ function AuthForm() {
   const { user, isAuthenticated, isHydrating } = useAuthStore();
 
   const mode = params.get("mode") === "signup" ? "signup" : "signin";
-  const redirectTo = params.get("redirectTo") ?? "/profile";
+  const redirectTo = params.get("redirectTo") ?? "/";
   const isSignupMode = mode === "signup";
 
   const [step,       setStep]       = useState<Step>("email");

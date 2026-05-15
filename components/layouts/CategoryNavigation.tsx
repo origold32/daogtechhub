@@ -3,7 +3,7 @@
 import { useRouter } from "next/navigation";
 import {
   ShoppingCart, User, ChevronDown, Package2,
-  Heart, Mail, Ticket, Sun, Moon, Search, Bell, LogOut, Loader2,
+  Heart, Mail, Ticket, Sun, Moon, Search, Bell, LogOut, Loader2, Shield,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { SmartAvatar } from "@/components/reusables/smart-avatar";
@@ -52,6 +52,9 @@ export function CategoryNavigation({ category }: CategoryNavigationProps) {
     { label: "Wishlist",   icon: Heart,    href: "/wishlist" },
     { label: "Inbox",      icon: Mail,     href: "/inbox" },
     { label: "Vouchers",   icon: Ticket,   href: "/vouchers" },
+    ...(user?.role === "admin"
+      ? [{ label: "Admin", icon: Shield, href: "/admin" } as const]
+      : []),
   ];
 
   const cartCount = getTotalItems();
@@ -193,14 +196,14 @@ export function CategoryNavigation({ category }: CategoryNavigationProps) {
           ) : (
             <div className="flex items-center gap-2">
               <Button
-                onClick={() => router.push("/auth?mode=signin&redirectTo=/profile")}
+                onClick={() => router.push("/auth?mode=signin&redirectTo=/")}
                 variant="outline" size="sm"
                 className="border-lilac/40 text-lilac hover:bg-lilac hover:text-deep-purple rounded-xl text-xs"
               >
                 Sign In
               </Button>
               <Button
-                onClick={() => router.push("/auth?mode=signup&redirectTo=/profile")}
+                onClick={() => router.push("/auth?mode=signup&redirectTo=/")}
                 size="sm"
                 className="bg-lilac text-deep-purple hover:bg-lilac/90 rounded-xl text-xs px-3"
               >

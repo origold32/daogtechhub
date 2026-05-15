@@ -11,7 +11,7 @@ import {
   ChevronUp, ChevronDown, Search, Bell, Sun, Moon, BarChart3,
   DollarSign, Boxes, Star, Upload, Image as ImageIcon, X,
   Shield, UserCheck, Zap, RefreshCw, Filter, Download,
-  AlertTriangle, CheckCircle2, Wifi, Database, Lock
+  AlertTriangle, CheckCircle2, Wifi, Database, Lock, Loader2
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
 import { useThemeStore } from "@/store/themeStore";
@@ -20,6 +20,7 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
+import { useSignOut } from "@/hooks/useSignOut";
 
 type AdminSection = "overview" | "products" | "orders" | "analytics" | "support" | "swaps" | "enquiries" | "manual-payments" | "settings" | "users" | "auth-logs" | "marketing";
 type UserRole = "admin" | "customer" | "vendor";
@@ -115,11 +116,11 @@ interface SupportSearchResult {
 const NAV_ITEMS = [
   { id: "overview" as const, label: "Overview", icon: LayoutDashboard },
   { id: "products" as const, label: "Products", icon: Package },
-  { id: "orders" as const, label: "Orders", icon: ShoppingBag, badge: 3 },
+  { id: "orders" as const, label: "Orders", icon: ShoppingBag },
   { id: "analytics" as const, label: "Analytics", icon: BarChart3 },
   { id: "support" as const, label: "Support", icon: Search },
-  { id: "swaps" as const, label: "Swaps", icon: ArrowRightLeft, badge: 2 },
-  { id: "enquiries" as const, label: "Enquiries", icon: MessageSquare, badge: 5 },
+  { id: "swaps" as const, label: "Swaps", icon: ArrowRightLeft },
+  { id: "enquiries" as const, label: "Enquiries", icon: MessageSquare },
   { id: "manual-payments" as const, label: "Manual Payments", icon: Upload },
   { id: "users" as const, label: "Users & Roles", icon: Users },
   { id: "auth-logs" as const, label: "Auth Logs", icon: Lock },
@@ -178,10 +179,17 @@ interface AddProductForm {
 }
 
 export default function AdminPage() {
-  const { user, logout } = useAuthStore();
+  const { user, isHydrating, isAuthenticated } = useAuthStore();
   const { theme, toggleTheme } = useThemeStore();
   const router = useRouter();
-  const [section, setSection] = useState<AdminSection>("overview");
+  const { handleSignOut, loading: signingOut } = useSignOut();
+  const isAdminSection = (value: string | null): value is AdminSection =>
+    Boolean(value && NAV_ITEMS.some((item) => item.id === value));
+  const [section, setSection] = useState<AdminSection>(() => {
+    if (typeof window === "undefined") return "overview";
+    const param = new URLSearchParams(window.location.search).get("section");
+    return isAdminSection(param) ? param : "overview";
+  });
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [productForm, setProductForm] = useState<AddProductForm>({
@@ -321,8 +329,29 @@ export default function AdminPage() {
   };
 
   useEffect(() => {
-    if (user && user.role !== "admin") router.push("/");
-  }, [user, router]);
+    if (isHydrating) return;
+    if (!isAuthenticated) {
+      const destination = typeof window === "undefined"
+        ? "/admin"
+        : `${window.location.pathname}${window.location.search}`;
+      router.replace(`/auth?redirectTo=${encodeURIComponent(destination)}`);
+      return;
+    }
+    if (user?.role && user.role !== "admin") {
+      router.replace("/");
+    }
+  }, [isHydrating, isAuthenticated, user?.role, router]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const desired = section === "overview"
+      ? "/admin"
+      : `/admin?section=${encodeURIComponent(section)}`;
+    const current = `${window.location.pathname}${window.location.search}`;
+    if (current !== desired) {
+      router.replace(desired);
+    }
+  }, [section, router]);
 
   useEffect(() => {
     if (section === "users") fetchUsers();
@@ -410,6 +439,19 @@ export default function AdminPage() {
     ...estatesData.map((p) => ({ ...p, cat: "Real Estate", img: p.image_url, image: p.image_url })),
   ].filter((p) => !searchQ || p.name.toLowerCase().includes(searchQ.toLowerCase()));
 
+  const sectionLabel = NAV_ITEMS.find((item) => item.id === section)?.label ?? section;
+
+  if (isHydrating) {
+    return (
+      <div className="min-h-screen flex items-center justify-center" style={{ background: "#0d0620" }}>
+        <div className="flex items-center gap-3 text-muted-lavender">
+          <Loader2 className="w-5 h-5 animate-spin" />
+          <span className="text-sm">Loading admin…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen flex" style={{ background: "#0d0620" }}>
       {/* Sidebar */}
@@ -484,8 +526,11 @@ export default function AdminPage() {
 
             {/* Logout */}
             <div className="px-3 pb-4">
-              <button onClick={() => { logout(); router.push("/"); }}
-                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400 hover:bg-red-500/10 text-sm transition-colors">
+              <button
+                onClick={handleSignOut}
+                disabled={signingOut}
+                className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-red-400 hover:bg-red-500/10 text-sm transition-colors disabled:opacity-60 disabled:cursor-not-allowed"
+              >
                 <LogOut className="w-4 h-4" /> Sign Out
               </button>
             </div>
@@ -503,7 +548,7 @@ export default function AdminPage() {
               className="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center transition-colors">
               <Menu className="w-4 h-4 text-muted-lavender" />
             </button>
-            <h2 className="text-soft-white font-bold capitalize">{section}</h2>
+            <h2 className="text-soft-white font-bold">{sectionLabel}</h2>
           </div>
           <div className="flex items-center gap-2">
             <button onClick={() => toast.info("Refreshing data...")}
@@ -890,6 +935,28 @@ export default function AdminPage() {
                     <Button onClick={fetchUsers} variant="outline"
                       className="border-white/20 text-muted-lavender hover:bg-white/10 rounded-xl gap-2 text-sm">
                       <RefreshCw className={cn("w-4 h-4", usersLoading && "animate-spin")} /> Refresh
+                    </Button>
+                  </div>
+
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-white/5 border border-white/10">
+                      <Search className="w-4 h-4 text-muted-lavender" />
+                      <input
+                        value={searchQ}
+                        onChange={(e) => setSearchQ(e.target.value)}
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") fetchUsers();
+                        }}
+                        placeholder="Search users…"
+                        className="bg-transparent text-soft-white text-sm outline-none placeholder-muted-lavender/50 w-56"
+                      />
+                    </div>
+                    <Button
+                      onClick={fetchUsers}
+                      variant="outline"
+                      className="border-white/20 text-muted-lavender hover:bg-white/10 rounded-xl gap-2 text-sm"
+                    >
+                      Search
                     </Button>
                   </div>
 

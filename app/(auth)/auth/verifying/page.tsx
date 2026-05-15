@@ -17,7 +17,7 @@ type UIState = "verifying" | "success" | "error";
 function VerifyingContent() {
   const router = useRouter();
   const params = useSearchParams();
-  const next   = params.get("next") ?? "/profile";
+  const next   = params.get("next") ?? "/";
   const code   = params.get("code"); // should NEVER be here
   const tokenHash = params.get("token_hash");
   const oauthProvider = params.get("oauthProvider");
@@ -26,7 +26,7 @@ function VerifyingContent() {
   const [stepIndex, setStepIndex] = useState(0);
   const [errorMsg,  setErrorMsg]  = useState("");
   const done = useRef(false);
-  const redirectPath = next.startsWith("/") ? next : "/profile";
+  const redirectPath = next.startsWith("/") ? next : "/";
 
   // Self-heal: if ?code= or ?token_hash= land here (stale links or old build),
   // immediately redirect to the correct server route before anything else runs.

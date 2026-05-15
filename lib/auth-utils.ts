@@ -1,4 +1,4 @@
-const DEFAULT_AUTH_REDIRECT_PATH = "/profile";
+const DEFAULT_AUTH_REDIRECT_PATH = "/";
 const CUSTOM_AUTH_COOKIE_NAME = "daogtechhub-auth";
 
 function getProjectRefAuthStorageKey(supabaseUrl?: string) {

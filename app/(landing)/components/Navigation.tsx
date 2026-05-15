@@ -3,7 +3,7 @@
 import { useState, RefObject } from "react";
 import {
   Menu, X, User, ChevronDown,
-  Heart, Package2, Mail, Ticket, LogOut, Loader2,
+  Heart, Package2, Mail, Ticket, LogOut, Loader2, Shield,
 } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Button } from "@/components/ui/button";
@@ -47,6 +47,9 @@ export function Navigation({ links }: NavigationProps) {
     { label: "Wishlist",   icon: Heart,    href: "/wishlist" },
     { label: "Inbox",      icon: Mail,     href: "/inbox" },
     { label: "Vouchers",   icon: Ticket,   href: "/vouchers" },
+    ...(user?.role === "admin"
+      ? [{ label: "Admin", icon: Shield, href: "/admin" } as const]
+      : []),
   ];
 
   return (
