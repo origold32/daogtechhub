@@ -12,7 +12,7 @@ import {
   MapPin, Phone, Mail, Loader2, RefreshCw, Trash2,
   ShoppingBag, Clock, Truck, Star, Camera, AlertCircle,
 } from "lucide-react";
-import { useAuthStore } from "@/store/authStore";
+import { useAuthStore, UserRole } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 import { useSignOut } from "@/hooks/useSignOut";
 import AuthGuard from "@/components/providers/AuthGuard";
@@ -194,7 +194,7 @@ function ProfilePageInner() {
   // Sync profile role to auth store whenever profile data changes
   useEffect(() => {
     if (profile?.role && profile.role !== user?.role) {
-      updateUser({ role: profile.role });
+      updateUser({ role: profile.role as UserRole });
     }
   }, [profile?.role, user?.role, updateUser]);
 
