@@ -36,10 +36,10 @@ export async function POST(req: NextRequest) {
 
     const service = createServiceRoleClient();
 
-    // Get current order
+    // Get current order with customer profile
     const { data: currentOrder, error: fetchError } = await service
       .from("orders")
-      .select("*, order_items(*)")
+      .select("*, order_items(*), profiles(first_name, last_name, email)")
       .eq("id", orderId)
       .single();
 
@@ -64,8 +64,8 @@ export async function POST(req: NextRequest) {
         user_id: currentOrder.user_id,
         receipt_number: receiptNumber,
         payment_reference: currentOrder.payment_reference ?? `manual-${orderId}`,
-        customer_name: "", // TODO: get from profile
-        customer_email: "", // TODO
+        customer_name: [currentOrder.profiles?.first_name, currentOrder.profiles?.last_name].filter(Boolean).join(" ") || "",
+        customer_email: currentOrder.profiles?.email ?? ""
         amount_paid: currentOrder.grand_total,
         currency: currentOrder.currency,
         payment_channel: "manual",

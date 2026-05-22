@@ -25,7 +25,7 @@ export async function GET(req: NextRequest) {
 
     let query = service
       .from("profiles")
-      .select("id, first_name, last_name, email, phone, avatar_url, role, created_at")
+      .select("id, first_name, last_name, email, phone, avatar_url, role, is_active, created_at")
       .order("created_at", { ascending: false });
 
     // Validate roleParam before passing to .eq() — the column type is a union,

@@ -121,7 +121,7 @@ function ProfilePageInner() {
   const router                    = useRouter();
   const { user, logout, updateUser } = useAuthStore();
   const { items, wishlist, removeFromWishlist, moveWishlistToCart, removeItem } = useCartStore();
-  const { handleSignOut: signOut } = useSignOut();
+  const { handleSignOut } = useSignOut();
 
   const [tab,         setTab]     = useState<Tab>("overview");
   const [profile,     setProfile] = useState<ProfileData | null>(null);
@@ -232,16 +232,6 @@ function ProfilePageInner() {
       setDbWishlist(prev => prev.filter(w => w.product_id !== productId));
       removeFromWishlist(productId);
     } catch { toast.error("Failed to remove from wishlist"); }
-  };
-
-  // ── Handle sign out ──────────────────────────────────────────────────────
-  const handleSignOut = async () => {
-    try {
-      await signOut(); // clears Supabase session, Zustand store, cart, then navigates to "/"
-      toast.success("Signed out successfully");
-    } catch {
-      toast.error("Failed to sign out — please try again.");
-    }
   };
 
   // ── Avatar initials ──────────────────────────────────────────────────────

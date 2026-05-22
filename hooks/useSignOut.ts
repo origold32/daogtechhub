@@ -11,20 +11,26 @@ export function useSignOut() {
     if (loading) return;
     setLoading(true);
 
-    try {
-      // "local" clears the session from this browser only without a server
-      // round-trip — works even when the token is already expired.
-      await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
-    } catch {
-      // Ignore Supabase errors — we always clear local state below
-    }
+    // Navigate FIRST — before any state changes or async calls.
+    // If we clear the store first, AuthGuard on protected pages fires
+    // router.replace("/auth?redirectTo=<page>") which races with our
+    // intended destination and can bounce the user back to the page
+    // they just signed out from.
+    window.location.replace("/");
 
-    // Always clear client state regardless of whether the API call succeeded
+    // Clear session client-side and server-side in parallel.
+    // "local" clears the browser cookie; the POST clears the SSR cookie
+    // used by middleware — both must be gone to fully sign out.
+    try {
+      await Promise.allSettled([
+        getSupabaseBrowserClient().auth.signOut({ scope: "local" }),
+        fetch("/auth/signout", { method: "POST" }),
+      ]);
+    } catch {
+      // Ignore — navigation already in progress
+    }
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
-
-    // Hard navigation ensures no stale server cache or authenticated UI lingers
-    window.location.replace("/");
   }, [loading]);
 
   return { handleSignOut, loading };
