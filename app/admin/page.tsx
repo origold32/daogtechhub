@@ -219,6 +219,8 @@ export default function AdminPage() {
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
   const [swaps, setSwaps] = useState<SwapRequest[]>([]);
   const [swapsLoading, setSwapsLoading] = useState(false);
+  const [enquiries, setEnquiries] = useState<Array<{ id: string; name: string; email: string; product: string; message: string; created_at: string; is_resolved: boolean }>>([]);
+  const [enquiriesLoading, setEnquiriesLoading] = useState(false);
 
   const statsState = useFetchOne<AdminStats>("/api/admin/stats");
   const ordersState = useFetchOne<AdminOrder[]>("/api/admin/orders?pageSize=6");
@@ -360,6 +362,19 @@ export default function AdminPage() {
     }
   };
 
+  const fetchEnquiries = async () => {
+    setEnquiriesLoading(true);
+    try {
+      const res = await fetch("/api/contact?resolved=false");
+      const json = await res.json();
+      if (json.success) setEnquiries(json.data ?? []);
+    } catch {
+      toast.error("Failed to load enquiries");
+    } finally {
+      setEnquiriesLoading(false);
+    }
+  };
+
   const handleSwapAction = async (swapId: string, status: "approved" | "rejected") => {
     try {
       const res = await fetch("/api/admin/swaps", {
@@ -408,6 +423,11 @@ export default function AdminPage() {
 
   useEffect(() => {
     if (section === "swaps") fetchSwaps();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
+
+  useEffect(() => {
+    if (section === "enquiries") fetchEnquiries();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section]);
 
@@ -1341,31 +1361,58 @@ export default function AdminPage() {
               {/* ENQUIRIES */}
               {section === "enquiries" && (
                 <div className="space-y-5">
-                  <h1 className="text-2xl font-bold text-soft-white">Customer Enquiries</h1>
-                  <div className="space-y-3">
-                    {[
-                      { name: "David Okonkwo", email: "david@gmail.com", product: "BMW X5", msg: "Is the car still available? Can I schedule a viewing?", time: "5 min ago", unread: true },
-                      { name: "Blessing Nwosu", email: "blessing@yahoo.com", product: "Lekki Duplex", msg: "What is the asking price? Is it negotiable?", time: "1 hr ago", unread: true },
-                      { name: "Hakeem Alabi", email: "hakeem@gmail.com", product: "MacBook Pro", msg: "Do you have any with 64GB RAM?", time: "3 hrs ago", unread: false },
-                      { name: "Sade Olu", email: "sade@gmail.com", product: "Galaxy S24 Ultra", msg: "Do you offer trade-ins?", time: "1 day ago", unread: false },
-                    ].map((e, i) => (
-                      <div key={i} className={cn("flex items-start justify-between gap-4 p-4 rounded-2xl border transition-colors", e.unread ? "border-lilac/20 bg-lilac/5" : "border-white/10 bg-white/3")}>
-                        <div className="flex-1">
-                          <div className="flex items-center gap-2 mb-1">
-                            <p className="text-soft-white font-medium text-sm">{e.name}</p>
-                            {e.unread && <span className="w-2 h-2 rounded-full bg-lilac flex-shrink-0" />}
-                            <span className="text-muted-lavender/50 text-xs ml-auto">{e.time}</span>
-                          </div>
-                          <p className="text-muted-lavender text-xs mb-1">{e.email} · Re: {e.product}</p>
-                          <p className="text-muted-lavender/80 text-sm">{e.msg}</p>
-                        </div>
-                        <button onClick={() => toast.info(`Opening reply to ${e.name}...`)}
-                          className="text-xs text-lilac hover:bg-lilac/10 px-3 py-1.5 rounded-xl border border-lilac/30 flex-shrink-0 transition-colors">
-                          Reply
-                        </button>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between">
+                    <h1 className="text-2xl font-bold text-soft-white">Customer Enquiries</h1>
+                    <Button onClick={fetchEnquiries} variant="outline"
+                      className="border-white/20 text-muted-lavender hover:bg-white/10 rounded-xl gap-2 text-sm">
+                      <RefreshCw className={cn("w-4 h-4", enquiriesLoading && "animate-spin")} /> Refresh
+                    </Button>
                   </div>
+                  {enquiriesLoading ? (
+                    <div className="text-center py-12 text-muted-lavender">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p className="text-sm">Loading enquiries…</p>
+                    </div>
+                  ) : enquiries.length === 0 ? (
+                    <div className="text-center py-12">
+                      <MessageSquare className="w-10 h-10 text-muted-lavender mx-auto mb-3 opacity-40" />
+                      <p className="text-muted-lavender text-sm">No enquiries found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {enquiries.map((e) => {
+                        const timeAgo = (() => {
+                          const date = new Date(e.created_at);
+                          const now = new Date();
+                          const diffMs = now.getTime() - date.getTime();
+                          const diffMins = Math.floor(diffMs / 60000);
+                          if (diffMins < 1) return "just now";
+                          if (diffMins < 60) return `${diffMins}m ago`;
+                          const diffHrs = Math.floor(diffMins / 60);
+                          if (diffHrs < 24) return `${diffHrs}h ago`;
+                          const diffDays = Math.floor(diffHrs / 24);
+                          return `${diffDays}d ago`;
+                        })();
+                        return (
+                          <div key={e.id} className={cn("flex items-start justify-between gap-4 p-4 rounded-2xl border transition-colors", !e.is_resolved ? "border-lilac/20 bg-lilac/5" : "border-white/10 bg-white/3")}>
+                            <div className="flex-1">
+                              <div className="flex items-center gap-2 mb-1">
+                                <p className="text-soft-white font-medium text-sm">{e.name}</p>
+                                {!e.is_resolved && <span className="w-2 h-2 rounded-full bg-lilac flex-shrink-0" />}
+                                <span className="text-muted-lavender/50 text-xs ml-auto">{timeAgo}</span>
+                              </div>
+                              <p className="text-muted-lavender text-xs mb-1">{e.email} · Re: {e.product}</p>
+                              <p className="text-muted-lavender/80 text-sm">{e.message}</p>
+                            </div>
+                            <button onClick={() => toast.info(`Opening reply to ${e.name}...`)}
+                              className="text-xs text-lilac hover:bg-lilac/10 px-3 py-1.5 rounded-xl border border-lilac/30 flex-shrink-0 transition-colors">
+                              Reply
+                            </button>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 

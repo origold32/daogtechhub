@@ -1,6 +1,8 @@
 "use client";
 import { useCallback, useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { resetSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
@@ -11,26 +13,32 @@ export function useSignOut() {
     if (loading) return;
     setLoading(true);
 
-    // Navigate FIRST — before any state changes or async calls.
-    // If we clear the store first, AuthGuard on protected pages fires
-    // router.replace("/auth?redirectTo=<page>") which races with our
-    // intended destination and can bounce the user back to the page
-    // they just signed out from.
-    window.location.replace("/");
-
-    // Clear session client-side and server-side in parallel.
-    // "local" clears the browser cookie; the POST clears the SSR cookie
-    // used by middleware — both must be gone to fully sign out.
     try {
+      // Clear session server-side and browser client-side in parallel.
+      // "local" clears the browser cookie; the POST clears the SSR cookie
+      // used by middleware — both must be gone to fully sign out.
       await Promise.allSettled([
         getSupabaseBrowserClient().auth.signOut({ scope: "local" }),
         fetch("/auth/signout", { method: "POST" }),
       ]);
-    } catch {
-      // Ignore — navigation already in progress
+
+      // Clear PKCE code_verifier cookies to prevent any session restoration
+      clearSupabasePkceCookiesInBrowser();
+
+      // Reset the browser client instance to ensure no stale session
+      resetSupabaseBrowserClient();
+    } catch (err) {
+      console.error("Error during signout:", err);
+      // Continue with logout even if signout fails
     }
+
+    // Clear all local state
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
+
+    // Navigate AFTER all session clearing is complete
+    // Use replace to prevent back navigation to the user's previous page
+    window.location.replace("/");
   }, [loading]);
 
   return { handleSignOut, loading };
