@@ -106,18 +106,20 @@ function VerifyingContent() {
           return;
         }
 
+        const PRIMARY_ADMIN_EMAILS = ["daogstore@gmail.com", "adegbesanadebola1@gmail.com"];
         const meta = (json.user.user_metadata ?? {}) as Record<string, string>;
         const rawName = meta.full_name ?? meta.name ?? json.user.email?.split("@")[0] ?? "User";
         const parts = String(rawName).trim().split(/\s+/);
+        const email = json.user.email ?? "";
 
         useAuthStore.getState().login({
           id: json.user.id,
           firstName: meta.first_name ?? parts[0] ?? "User",
           lastName: meta.last_name ?? parts.slice(1).join(" ") ?? "",
-          email: json.user.email ?? "",
+          email,
           phone: json.user.phone ?? undefined,
           avatar: meta.avatar_url ?? meta.picture ?? undefined,
-          role: "customer",
+          role: PRIMARY_ADMIN_EMAILS.includes(email) ? "admin" : "customer",
         });
 
         window.history.replaceState({}, "", `/auth/verifying?next=${encodeURIComponent(redirectPath)}`);

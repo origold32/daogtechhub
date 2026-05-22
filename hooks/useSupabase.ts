@@ -129,13 +129,11 @@ export function useSessionHydration() {
       .getSession()
       .then(({ data }: { data: { session: Session | null } }) => {
         const session = data.session;
-        if (!useAuthStore.getState().isHydrating) return;
-
+        // Always fetch fresh profile on init — no isHydrating gate
         if (session?.user && fetchingUserId.current !== session.user.id) {
           fetchingUserId.current = session.user.id;
           fetchAndStoreProfile(supabase, session.user.id, session.user.email, session.user.phone).then(() => {
             fetchingUserId.current = null;
-            // Ensure isHydrating is cleared after profile fetch completes
             useAuthStore.getState().setHydrating(false);
           });
         } else if (!session) {
@@ -152,14 +150,12 @@ export function useSessionHydration() {
         if ((event === "SIGNED_IN" || event === "INITIAL_SESSION") && session?.user) {
           const uid = session.user.id;
 
-          if (fetchingUserId.current === uid) return;
-
-          const stored = useAuthStore.getState();
-          if (!stored.isHydrating && stored.isAuthenticated && stored.user?.id === uid) return;
+          if (fetchingUserId.current === uid) return; // already in flight
 
           fetchingUserId.current = uid;
           await fetchAndStoreProfile(supabase, uid, session.user.email, session.user.phone);
           fetchingUserId.current = null;
+          useAuthStore.getState().setHydrating(false);
           return;
         }
 
