@@ -9,7 +9,7 @@ import {
   ArrowRightLeft, MessageSquare, Settings, LogOut, Menu,
   Plus, Eye, Edit, Trash2, Check, Clock,
   ChevronUp, ChevronDown, Search, Bell, Sun, Moon, BarChart3,
-  DollarSign, Upload, Image as ImageIcon, X,
+  DollarSign, Boxes, Upload, Image as ImageIcon, X,
   Shield, UserCheck, Zap, RefreshCw,
   AlertTriangle, CheckCircle2, Wifi, Database, Lock, Loader2
 } from "lucide-react";
@@ -210,57 +210,50 @@ export default function AdminPage() {
   const analyticsState = useFetchOne<AnalyticsSummary>(`/api/admin/analytics?range=${analyticsRange}`);
   const alertsState = useFetchOne<AdminAlerts>("/api/admin/alerts");
 
+  const totalInventory = statsState.data
+    ? statsState.data.inventory.gadgets + statsState.data.inventory.jerseys + statsState.data.inventory.cars + statsState.data.inventory.realEstates
+    : 0;
+
   const overviewStats = statsState.data
     ? [
         {
           label: "Total Revenue",
           value: formatCurrency(statsState.data.totalRevenue),
           change: statsState.data.totalRevenue > 0
-            ? `+${((statsState.data.revenueThisMonth / statsState.data.totalRevenue) * 100).toFixed(1)}%`
-            : "–",
+            ? `+${((statsState.data.revenueThisMonth / statsState.data.totalRevenue) * 100).toFixed(1)}% this month`
+            : "₦0 this month",
           up: true,
           icon: DollarSign,
           color: "from-purple-500/20 to-lilac/10",
         },
         {
-          label: "Pending Orders",
-          value: statsState.data.pendingOrders.toString(),
-          change: `${statsState.data.ordersThisMonth} this month`,
-          up: false,
-          icon: Clock,
-          color: "from-amber-500/20 to-amber-400/10",
-        },
-        {
-          label: "Manual Reviews",
-          value: statsState.data.pendingManualPayments.toString(),
-          change: `${statsState.data.pendingManualPayments} awaiting approval`,
-          up: statsState.data.pendingManualPayments === 0,
-          icon: Upload,
+          label: "Total Orders",
+          value: statsState.data.totalOrders.toLocaleString(),
+          change: `+${statsState.data.ordersThisMonth} this month`,
+          up: true,
+          icon: ShoppingBag,
           color: "from-blue-500/20 to-blue-400/10",
         },
         {
-          label: "Confirmed Orders",
-          value: statsState.data.confirmedOrders.toString(),
-          change: `${statsState.data.confirmedOrders} confirmed`,
-          up: true,
-          icon: Check,
+          label: "Products",
+          value: totalInventory.toLocaleString(),
+          change: statsState.data.lowStock > 0 ? `${statsState.data.lowStock} low stock` : "All stocked",
+          up: statsState.data.lowStock === 0,
+          icon: Boxes,
           color: "from-green-500/20 to-green-400/10",
         },
         {
-          label: "Low Stock",
-          value: statsState.data.lowStock.toString(),
-          change: `${statsState.data.lowStock} items`,
-          up: false,
-          icon: AlertTriangle,
-          color: "from-red-500/20 to-red-400/10",
+          label: "Customers",
+          value: statsState.data.totalUsers.toLocaleString(),
+          change: `${statsState.data.pendingOrders} orders pending`,
+          up: true,
+          icon: Users,
+          color: "from-amber-500/20 to-amber-400/10",
         },
       ]
     : [];
 
   const revenueTrend = statsState.data?.monthlyRevenue ?? [];
-  const totalInventory = statsState.data
-    ? statsState.data.inventory.gadgets + statsState.data.inventory.jerseys + statsState.data.inventory.cars + statsState.data.inventory.realEstates
-    : 0;
   const categoryBreakdown = statsState.data
     ? [
         { label: "Gadgets", pct: totalInventory ? Math.round((statsState.data.inventory.gadgets / totalInventory) * 100) : 0, color: "bg-lilac" },
@@ -677,7 +670,7 @@ export default function AdminPage() {
                   {/* Stats */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
                     {statsState.loading ? (
-                      Array.from({ length: 5 }).map((_, i) => (
+                      Array.from({ length: 4 }).map((_, i) => (
                         <div key={i} className="p-5 rounded-2xl border border-white/10 bg-white/3 animate-pulse">
                           <div className="h-4 bg-white/10 rounded mb-3 w-1/2" />
                           <div className="h-8 bg-white/10 rounded mb-2 w-3/4" />

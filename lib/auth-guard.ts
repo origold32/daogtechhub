@@ -16,18 +16,22 @@ export async function requireAuth() {
   const { data: profile } = await supabase
     .from("profiles").select("*").eq("id", user.id).single();
 
-  // Guarantee primary admins always have role = 'admin', fixing DB silently if needed
-  if (profile && PRIMARY_ADMIN_EMAILS.includes(profile.email ?? "")) {
-    if (profile.role !== "admin") {
+  // Check primary admin by JWT email — works even when profile is null or has wrong role.
+  const userEmail = user.email ?? "";
+  if (PRIMARY_ADMIN_EMAILS.includes(userEmail)) {
+    // Silently repair DB role in background if wrong or missing
+    if (!profile || profile.role !== "admin") {
       try {
         createServiceRoleClient()
           .from("profiles")
-          .update({ role: "admin" })
-          .eq("id", profile.id)
+          .upsert({ id: user.id, email: userEmail, role: "admin", is_active: true, first_name: "", last_name: "" }, { onConflict: "id" })
           .then(() => {});
       } catch { /* best-effort */ }
     }
-    return { user, supabase, profile: { ...profile, role: "admin" as UserRole }, error: null } as const;
+    const adminProfile = profile
+      ? { ...profile, role: "admin" as UserRole }
+      : { id: user.id, email: userEmail, role: "admin" as UserRole, is_active: true } as NonNullable<typeof profile>;
+    return { user, supabase, profile: adminProfile, error: null } as const;
   }
 
   return { user, supabase, profile, error: null } as const;
@@ -36,6 +40,12 @@ export async function requireAuth() {
 export async function requireRole(...roles: UserRole[]) {
   const auth = await requireAuth();
   if (auth.error) return auth;
+
+  // Primary admins always pass — email is sourced from the verified JWT, not the DB
+  if (PRIMARY_ADMIN_EMAILS.includes(auth.user?.email ?? "")) {
+    return { ...auth, error: null } as const;
+  }
+
   if (auth.profile && auth.profile.is_active === false) {
     return { ...auth, error: forbidden("Account is inactive") } as const;
   }
