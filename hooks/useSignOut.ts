@@ -1,34 +1,31 @@
 "use client";
 import { useCallback, useState } from "react";
-import { useRouter } from "next/navigation";
 import { getSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { useAuthStore } from "@/store/authStore";
 import { useCartStore } from "@/store/cartStore";
 
 export function useSignOut() {
   const [loading, setLoading] = useState(false);
-  const router = useRouter();
 
   const handleSignOut = useCallback(async () => {
     if (loading) return;
     setLoading(true);
 
-    const { error } = await getSupabaseBrowserClient().auth.signOut({ scope: "global" });
-    if (error) {
-      console.error("Sign-out failed:", error.message);
-      setLoading(false);
-      return;
+    try {
+      // "local" clears the session from this browser only without a server
+      // round-trip — works even when the token is already expired.
+      await getSupabaseBrowserClient().auth.signOut({ scope: "local" });
+    } catch {
+      // Ignore Supabase errors — we always clear local state below
     }
 
-    // Clear all client-side state
+    // Always clear client state regardless of whether the API call succeeded
     useAuthStore.getState().logout();
     useCartStore.getState().clearCart?.();
 
-    // router.refresh() clears Next.js server cache
-    // window.location.replace ensures hard navigation — no stale authenticated UI
-    router.refresh();
+    // Hard navigation ensures no stale server cache or authenticated UI lingers
     window.location.replace("/");
-  }, [loading, router]);
+  }, [loading]);
 
   return { handleSignOut, loading };
 }
