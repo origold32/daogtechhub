@@ -65,7 +65,7 @@ export async function POST(req: NextRequest) {
         receipt_number: receiptNumber,
         payment_reference: currentOrder.payment_reference ?? `manual-${orderId}`,
         customer_name: [currentOrder.profiles?.first_name, currentOrder.profiles?.last_name].filter(Boolean).join(" ") || "",
-        customer_email: currentOrder.profiles?.email ?? ""
+        customer_email: currentOrder.profiles?.email ?? "",
         amount_paid: currentOrder.grand_total,
         currency: currentOrder.currency,
         payment_channel: "manual",
