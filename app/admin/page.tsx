@@ -562,9 +562,9 @@ export default function AdminPage() {
                     )}>
                     <Icon className="w-4 h-4" />
                     {item.label}
-                    {((item.id === "manual-payments" ? manualPaymentOrders.length : item.badge) ?? 0) > 0 && (
+                    {item.id === "manual-payments" && manualPaymentOrders.length > 0 && (
                       <span className={cn("ml-auto text-xs px-1.5 py-0.5 rounded-full font-bold", section === item.id ? "bg-deep-purple/30 text-deep-purple" : "bg-red-500/20 text-red-400")}>
-                        {item.id === "manual-payments" ? manualPaymentOrders.length : item.badge}
+                        {manualPaymentOrders.length}
                       </span>
                     )}
                   </button>
