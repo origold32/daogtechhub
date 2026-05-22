@@ -131,12 +131,6 @@ function ProfilePageInner() {
   const [saving,      setSaving]  = useState(false);
   const [orderFilter, setOrderFilter] = useState("all");
 
-  // Redirect admins straight to the dashboard
-  useEffect(() => {
-    const role = profile?.role ?? user?.role;
-    if (role === "admin") router.replace("/admin");
-  }, [profile?.role, user?.role, router]);
-
   // Pending edits
   const [edits, setEdits] = useState<Partial<ProfileData>>({});
 

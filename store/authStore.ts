@@ -43,7 +43,7 @@ export const useAuthStore = create<AuthState>()(
       isAuthenticated: false,
       isHydrating:     true,  // starts true; cleared once session check completes
 
-      login:  (user) => set({ user, isAuthenticated: true, isHydrating: false }),
+      login:  (user) => set({ user, isAuthenticated: true }),
       logout: ()     => set({ user: null, isAuthenticated: false, isHydrating: false }),
 
       updateUser: (patch) => {
