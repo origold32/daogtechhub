@@ -131,6 +131,12 @@ function ProfilePageInner() {
   const [saving,      setSaving]  = useState(false);
   const [orderFilter, setOrderFilter] = useState("all");
 
+  // Redirect admins straight to the dashboard
+  useEffect(() => {
+    const role = profile?.role ?? user?.role;
+    if (role === "admin") router.replace("/admin");
+  }, [profile?.role, user?.role, router]);
+
   // Pending edits
   const [edits, setEdits] = useState<Partial<ProfileData>>({});
 
@@ -321,12 +327,13 @@ function ProfilePageInner() {
               </h2>
               <p className="text-white/50 text-sm truncate">{user?.email}</p>
               <div className="flex items-center gap-2 mt-2">
-                <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#d4a5ff]/15 text-[#d4a5ff] capitalize">
-                  {profile?.role ?? user?.role ?? "Customer"}
-                </span>
-                {(profile?.role ?? user?.role) === "admin" && (
+                {(profile?.role ?? user?.role) === "admin" ? (
                   <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400">
                     Admin
+                  </span>
+                ) : (
+                  <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#d4a5ff]/15 text-[#d4a5ff] capitalize">
+                    {profile?.role ?? user?.role ?? "Customer"}
                   </span>
                 )}
               </div>
