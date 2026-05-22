@@ -51,6 +51,8 @@ export function toFriendlyError(raw: string | undefined | null): string {
   return raw!.charAt(0).toUpperCase() + raw!.slice(1);
 }
 
+const PRIMARY_ADMIN_EMAILS = ["daogstore@gmail.com", "adegbesanadebola1@gmail.com"];
+
 export async function fetchAndStoreProfile(
   supabase: NonNullable<ReturnType<typeof getClient>>,
   userId: string,
@@ -76,14 +78,19 @@ export async function fetchAndStoreProfile(
   }
 
   if (profile) {
+    const email = (profile.email as string) ?? fallbackEmail ?? "";
+    const role: "customer" | "admin" | "vendor" =
+      PRIMARY_ADMIN_EMAILS.includes(email)
+        ? "admin"
+        : ((profile.role as "customer" | "admin" | "vendor") ?? "customer");
     useAuthStore.getState().login({
       id: profile.id as string,
       firstName: (profile.first_name as string) ?? "",
       lastName: (profile.last_name as string) ?? "",
-      email: (profile.email as string) ?? fallbackEmail ?? "",
+      email,
       phone: (profile.phone as string) ?? fallbackPhone ?? undefined,
       avatar: (profile.avatar_url as string) ?? undefined,
-      role: (profile.role as "customer" | "admin" | "vendor") ?? "customer",
+      role,
       addressLine1: (profile.address_line1 as string) ?? undefined,
       addressLine2: (profile.address_line2 as string) ?? undefined,
       city: (profile.city as string) ?? undefined,
