@@ -161,7 +161,7 @@ function ProfilePageInner() {
         const d = profJson.data;
         setProfile(d);
         setEdits(d);
-        // Sync ALL profile fields into the store, including address
+        // Sync ALL profile fields into the store, including address and role
         updateUser({
           id:           d.id,
           firstName:    d.firstName,
@@ -169,6 +169,7 @@ function ProfilePageInner() {
           email:        d.email,
           phone:        d.phone        ?? undefined,
           avatar:       d.avatar       ?? undefined,
+          role:         d.role         ?? "customer",
           addressLine1: d.addressLine1 ?? undefined,
           addressLine2: d.addressLine2 ?? undefined,
           city:         d.city         ?? undefined,
@@ -203,12 +204,15 @@ function ProfilePageInner() {
       if (!json.success) throw new Error(json.error);
       const d = json.data;
       setProfile(d);
-      // Sync ALL updated fields into the store
+      // Sync ALL updated fields into the store, including role
       updateUser({
+        id:           d.id,
         firstName:    d.firstName,
         lastName:     d.lastName,
+        email:        d.email,
         phone:        d.phone        ?? undefined,
         avatar:       d.avatar       ?? undefined,
+        role:         d.role         ?? "customer",
         addressLine1: d.addressLine1 ?? undefined,
         addressLine2: d.addressLine2 ?? undefined,
         city:         d.city         ?? undefined,
