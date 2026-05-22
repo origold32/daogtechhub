@@ -9,6 +9,9 @@ import type { UserRole } from "@/types/database";
 
 const VALID_ROLES: UserRole[] = ["customer", "admin", "vendor"];
 
+// These accounts always retain admin role and cannot be deleted via the UI
+const PRIMARY_ADMIN_EMAILS = ["adegbesanadebola1@gmail.com", "daogstore@gmail.com"];
+
 export async function PATCH(
   req: NextRequest,
   { params }: { params: { id: string } }
@@ -30,9 +33,19 @@ export async function PATCH(
       return badRequest("You cannot change your own role. Ask another admin.");
     }
 
-    // Use service role client so the update bypasses RLS
     const { createServiceRoleClient } = await import("@/supabase/server");
     const service = createServiceRoleClient();
+
+    // Fetch the target user's email before allowing changes
+    const { data: target } = await service
+      .from("profiles")
+      .select("email")
+      .eq("id", id)
+      .single();
+
+    if (target?.email && PRIMARY_ADMIN_EMAILS.includes(target.email) && role !== "admin") {
+      return badRequest("This is a primary admin account. Its role cannot be changed.");
+    }
 
     const { data, error } = await service
       .from("profiles")
@@ -66,6 +79,17 @@ export async function DELETE(
 
     const { createServiceRoleClient } = await import("@/supabase/server");
     const service = createServiceRoleClient();
+
+    // Protect primary admin accounts from deletion
+    const { data: target } = await service
+      .from("profiles")
+      .select("email")
+      .eq("id", id)
+      .single();
+
+    if (target?.email && PRIMARY_ADMIN_EMAILS.includes(target.email)) {
+      return badRequest("This is a primary admin account and cannot be deleted.");
+    }
 
     // Delete from auth.users — cascades to profiles via FK
     const { error } = await service.auth.admin.deleteUser(id);

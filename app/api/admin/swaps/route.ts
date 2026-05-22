@@ -1,10 +1,10 @@
 export const dynamic = "force-dynamic";
 // app/api/admin/swaps/route.ts
 // GET   → All swap requests with filters (admin)
-// PATCH → Update swap status (admin)
+// PATCH → Update swap status / add admin notes (admin)
 
 import { NextRequest } from "next/server";
-import { ok, serverError, withMeta, parsePagination } from "@/lib/api-response";
+import { ok, badRequest, notFound, serverError, withMeta, parsePagination } from "@/lib/api-response";
 import { requireRole } from "@/lib/auth-guard";
 import type { Database } from "@/types/database";
 
@@ -38,6 +38,38 @@ export async function GET(req: NextRequest) {
       total: count ?? 0,
       totalPages: Math.ceil((count ?? 0) / pageSize),
     });
+  } catch (err) {
+    return serverError(err);
+  }
+}
+
+export async function PATCH(req: NextRequest) {
+  try {
+    const auth = await requireRole("admin");
+    if (auth.error) return auth.error;
+
+    const body = await req.json();
+    const { id, status, admin_notes } = body as { id: string; status: SwapStatus; admin_notes?: string };
+
+    if (!id) return badRequest("id is required");
+    if (!status || !VALID_STATUSES.includes(status)) {
+      return badRequest(`status must be one of: ${VALID_STATUSES.join(", ")}`);
+    }
+
+    const update: Record<string, unknown> = { status };
+    if (admin_notes !== undefined) update.admin_notes = admin_notes;
+
+    const { data, error } = await auth.supabase
+      .from("swap_requests")
+      .update(update)
+      .eq("id", id)
+      .select("id, status, admin_notes")
+      .single();
+
+    if (error) return serverError(error);
+    if (!data) return notFound("Swap request");
+
+    return ok(data, `Swap status updated to ${status}`);
   } catch (err) {
     return serverError(err);
   }

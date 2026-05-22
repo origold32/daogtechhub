@@ -25,6 +25,9 @@ import { useSignOut } from "@/hooks/useSignOut";
 type AdminSection = "overview" | "products" | "orders" | "analytics" | "support" | "swaps" | "enquiries" | "manual-payments" | "settings" | "users" | "auth-logs" | "marketing";
 type UserRole = "admin" | "customer" | "vendor";
 
+// Primary admin accounts — protected from role changes and deletion
+const PRIMARY_ADMINS = ["adegbesanadebola1@gmail.com", "daogstore@gmail.com"];
+
 interface LiveUser {
   id: string;
   first_name: string;
@@ -33,7 +36,21 @@ interface LiveUser {
   phone: string | null;
   avatar_url: string | null;
   role: UserRole;
+  is_active?: boolean;
   created_at: string;
+}
+
+interface SwapRequest {
+  id: string;
+  user_id: string;
+  target_gadget_name: string;
+  memory: string;
+  battery_health: string;
+  repair_history: string;
+  status: string;
+  admin_notes: string | null;
+  created_at: string;
+  profiles: { first_name: string; last_name: string; email: string | null } | null;
 }
 
 interface AdminOrder {
@@ -200,6 +217,8 @@ export default function AdminPage() {
   const [staffUsers, setStaffUsers] = useState<LiveUser[]>([]);
   const [usersLoading, setUsersLoading] = useState(false);
   const [roleUpdating, setRoleUpdating] = useState<string | null>(null);
+  const [swaps, setSwaps] = useState<SwapRequest[]>([]);
+  const [swapsLoading, setSwapsLoading] = useState(false);
 
   const statsState = useFetchOne<AdminStats>("/api/admin/stats");
   const ordersState = useFetchOne<AdminOrder[]>("/api/admin/orders?pageSize=6");
@@ -328,6 +347,35 @@ export default function AdminPage() {
     }
   };
 
+  const fetchSwaps = async () => {
+    setSwapsLoading(true);
+    try {
+      const res = await fetch("/api/admin/swaps?pageSize=50");
+      const json = await res.json();
+      if (json.success) setSwaps(json.data ?? []);
+    } catch {
+      toast.error("Failed to load swap requests");
+    } finally {
+      setSwapsLoading(false);
+    }
+  };
+
+  const handleSwapAction = async (swapId: string, status: "approved" | "rejected") => {
+    try {
+      const res = await fetch("/api/admin/swaps", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id: swapId, status }),
+      });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error ?? "Unable to update swap");
+      toast.success(`Swap ${status} successfully`);
+      setSwaps((prev) => prev.map((s) => s.id === swapId ? { ...s, status } : s));
+    } catch (err) {
+      toast.error((err as Error).message ?? "Failed to update swap");
+    }
+  };
+
   useEffect(() => {
     if (isHydrating) return;
     if (!isAuthenticated) {
@@ -358,7 +406,17 @@ export default function AdminPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [section, roleFilter]);
 
+  useEffect(() => {
+    if (section === "swaps") fetchSwaps();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [section]);
+
   const handleRoleChange = async (userId: string, newRole: UserRole) => {
+    const target = staffUsers.find((u) => u.id === userId);
+    if (target?.email && PRIMARY_ADMINS.includes(target.email) && newRole !== "admin") {
+      toast.error("This is a primary admin account. Its role cannot be changed.");
+      return;
+    }
     setRoleUpdating(userId);
     try {
       const res = await fetch(`/api/admin/users/${userId}`, {
@@ -396,6 +454,11 @@ export default function AdminPage() {
   };
 
   const handleDeleteUser = async (userId: string, name: string) => {
+    const target = staffUsers.find((u) => u.id === userId);
+    if (target?.email && PRIMARY_ADMINS.includes(target.email)) {
+      toast.error("This is a primary admin account and cannot be deleted.");
+      return;
+    }
     if (!confirm(`Delete ${name}? This cannot be undone.`)) return;
     try {
       const res = await fetch(`/api/admin/users/${userId}`, { method: "DELETE" });
@@ -987,8 +1050,12 @@ export default function AdminPage() {
                       const initials = (u.first_name?.[0] ?? u.email?.[0] ?? "?").toUpperCase();
                       const joinedDate = new Date(u.created_at).toLocaleDateString("en-NG", { month: "short", year: "numeric" });
                       const isUpdating = roleUpdating === u.id;
+                      const isPrimaryAdmin = u.email ? PRIMARY_ADMINS.includes(u.email) : false;
                       return (
-                        <motion.div key={u.id} layout className="flex items-center gap-4 p-4 rounded-2xl bg-white/3 border border-white/10">
+                        <motion.div key={u.id} layout className={cn(
+                          "flex items-center gap-4 p-4 rounded-2xl border",
+                          isPrimaryAdmin ? "bg-lilac/5 border-lilac/20" : "bg-white/3 border-white/10"
+                        )}>
                           <div className="w-10 h-10 rounded-2xl bg-gradient-to-br from-lilac/20 to-purple-500/20 flex items-center justify-center flex-shrink-0">
                             {u.avatar_url
                               ? <Image src={u.avatar_url} width={40} height={40} className="rounded-2xl object-cover" alt={fullName} unoptimized />
@@ -996,12 +1063,19 @@ export default function AdminPage() {
                             }
                           </div>
                           <div className="flex-1 min-w-0">
-                            <p className="text-soft-white font-semibold text-sm truncate">{fullName}</p>
+                            <div className="flex items-center gap-2">
+                              <p className="text-soft-white font-semibold text-sm truncate">{fullName}</p>
+                              {isPrimaryAdmin && (
+                                <span className="text-[10px] bg-lilac/20 text-lilac px-1.5 py-0.5 rounded-full font-bold shrink-0">Primary</span>
+                              )}
+                            </div>
                             <p className="text-muted-lavender text-xs truncate">{u.email ?? u.phone ?? "No contact"} · Joined {joinedDate}</p>
                           </div>
                           <div className="flex items-center gap-3 flex-shrink-0">
                             {isUpdating ? (
                               <span className="text-xs text-muted-lavender animate-pulse px-2">Saving…</span>
+                            ) : isPrimaryAdmin ? (
+                              <span className={cn("text-xs px-2 py-1 rounded-xl font-medium", ROLE_STYLES["admin"])}>Admin</span>
                             ) : (
                               <select
                                 value={u.role}
@@ -1015,8 +1089,15 @@ export default function AdminPage() {
                                 <option value="admin" style={{ background: "#1a0b2e" }}>Admin</option>
                               </select>
                             )}
-                            <button onClick={() => handleDeleteUser(u.id, fullName)}
-                              className="p-1.5 rounded-lg text-muted-lavender hover:text-red-400 hover:bg-red-500/10 transition-colors">
+                            <button
+                              onClick={() => handleDeleteUser(u.id, fullName)}
+                              disabled={isPrimaryAdmin}
+                              className={cn(
+                                "p-1.5 rounded-lg transition-colors",
+                                isPrimaryAdmin
+                                  ? "text-muted-lavender/30 cursor-not-allowed"
+                                  : "text-muted-lavender hover:text-red-400 hover:bg-red-500/10"
+                              )}>
                               <Trash2 className="w-3.5 h-3.5" />
                             </button>
                           </div>
@@ -1190,29 +1271,70 @@ export default function AdminPage() {
               {/* SWAPS */}
               {section === "swaps" && (
                 <div className="space-y-5">
-                  <h1 className="text-2xl font-bold text-soft-white">Swap Requests</h1>
-                  <div className="space-y-3">
-                    {[
-                      { id: "SW-001", user: "Tunde Adeyemi", from: "iPhone 13 Pro", to: "iPhone 15 Pro Max", battery: "82%", status: "pending" },
-                      { id: "SW-002", user: "Ngozi Eze", from: "Samsung S22", to: "Samsung S24 Ultra", battery: "91%", status: "under_review" },
-                      { id: "SW-003", user: "Yemi Alade", from: "iPhone 12", to: "iPhone 14 Pro", battery: "78%", status: "approved" },
-                    ].map((req) => (
-                      <div key={req.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/3 border border-white/10">
-                        <div className="w-9 h-9 rounded-xl bg-lilac/20 flex items-center justify-center flex-shrink-0">
-                          <ArrowRightLeft className="w-4 h-4 text-lilac" />
-                        </div>
-                        <div className="flex-1">
-                          <p className="text-soft-white text-sm font-medium">{req.user}</p>
-                          <p className="text-muted-lavender text-xs">{req.from} → {req.to} · Battery: {req.battery}</p>
-                        </div>
-                        <span className={cn("text-xs px-2 py-1 rounded-full", STATUS_STYLES[req.status])}>{req.status.replace("_", " ")}</span>
-                        <div className="flex gap-2">
-                          <button onClick={() => toast.success("Swap approved!")} className="text-xs text-green-400 hover:underline px-2 py-1 rounded-lg hover:bg-green-500/10">Approve</button>
-                          <button onClick={() => toast.info("Swap rejected")} className="text-xs text-red-400 hover:underline px-2 py-1 rounded-lg hover:bg-red-500/10">Reject</button>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex items-center justify-between flex-wrap gap-4">
+                    <div>
+                      <h1 className="text-2xl font-bold text-soft-white">Swap Requests</h1>
+                      <p className="text-muted-lavender text-sm mt-1">{swaps.length} swap request(s) total</p>
+                    </div>
+                    <Button onClick={fetchSwaps} variant="outline"
+                      className="border-white/20 text-muted-lavender hover:bg-white/10 rounded-xl gap-2 text-sm">
+                      <RefreshCw className={cn("w-4 h-4", swapsLoading && "animate-spin")} /> Refresh
+                    </Button>
                   </div>
+
+                  {swapsLoading ? (
+                    <div className="text-center py-12 text-muted-lavender">
+                      <RefreshCw className="w-6 h-6 animate-spin mx-auto mb-2" />
+                      <p className="text-sm">Loading swap requests…</p>
+                    </div>
+                  ) : swaps.length === 0 ? (
+                    <div className="text-center py-12">
+                      <ArrowRightLeft className="w-10 h-10 text-muted-lavender mx-auto mb-3 opacity-40" />
+                      <p className="text-muted-lavender text-sm">No swap requests found</p>
+                    </div>
+                  ) : (
+                    <div className="space-y-3">
+                      {swaps.map((req) => {
+                        const customerName = req.profiles
+                          ? `${req.profiles.first_name} ${req.profiles.last_name}`.trim() || req.profiles.email || "Unknown"
+                          : "Unknown";
+                        const isPending = req.status === "pending" || req.status === "under_review";
+                        return (
+                          <div key={req.id} className="flex items-center gap-4 p-4 rounded-2xl bg-white/3 border border-white/10">
+                            <div className="w-9 h-9 rounded-xl bg-lilac/20 flex items-center justify-center flex-shrink-0">
+                              <ArrowRightLeft className="w-4 h-4 text-lilac" />
+                            </div>
+                            <div className="flex-1 min-w-0">
+                              <p className="text-soft-white text-sm font-medium truncate">{customerName}</p>
+                              <p className="text-muted-lavender text-xs truncate">
+                                Wants: {req.target_gadget_name} · Memory: {req.memory} · Battery: {req.battery_health}
+                              </p>
+                              <p className="text-muted-lavender/60 text-xs">
+                                {new Date(req.created_at).toLocaleString()}
+                              </p>
+                            </div>
+                            <span className={cn("text-xs px-2 py-1 rounded-full shrink-0", STATUS_STYLES[req.status] ?? "bg-white/10 text-white/80")}>
+                              {req.status.replace(/_/g, " ")}
+                            </span>
+                            {isPending && (
+                              <div className="flex gap-2 shrink-0">
+                                <button
+                                  onClick={() => handleSwapAction(req.id, "approved")}
+                                  className="text-xs text-green-400 hover:underline px-2 py-1 rounded-lg hover:bg-green-500/10 transition-colors">
+                                  Approve
+                                </button>
+                                <button
+                                  onClick={() => handleSwapAction(req.id, "rejected")}
+                                  className="text-xs text-red-400 hover:underline px-2 py-1 rounded-lg hover:bg-red-500/10 transition-colors">
+                                  Reject
+                                </button>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1272,6 +1394,27 @@ export default function AdminPage() {
                           className="text-xs text-lilac hover:bg-lilac/10 px-3 py-1.5 rounded-xl border border-lilac/30 transition-colors">Edit</button>
                       </div>
                     ))}
+
+                    {/* Primary admin accounts */}
+                    <div className="p-4 rounded-2xl bg-lilac/10 border border-lilac/20">
+                      <div className="flex items-center gap-2 mb-3">
+                        <Shield className="w-4 h-4 text-lilac" />
+                        <p className="text-lilac text-sm font-semibold">Primary Admin Accounts</p>
+                      </div>
+                      <div className="space-y-2 ml-6">
+                        {PRIMARY_ADMINS.map((email) => (
+                          <div key={email} className="flex items-center gap-2">
+                            <div className="w-1.5 h-1.5 rounded-full bg-lilac shrink-0" />
+                            <p className="text-soft-white text-sm">{email}</p>
+                            <span className="ml-auto text-xs bg-lilac/20 text-lilac px-2 py-0.5 rounded-full">Protected</span>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-muted-lavender text-xs mt-3 ml-6">
+                        These accounts always retain admin role and cannot be removed via the dashboard.
+                      </p>
+                    </div>
+
                     <div className="p-4 rounded-2xl bg-green-500/10 border border-green-500/20">
                       <div className="flex items-center gap-2">
                         <CheckCircle2 className="w-4 h-4 text-green-400" />
