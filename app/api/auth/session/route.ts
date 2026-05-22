@@ -93,6 +93,9 @@ async function upsertProfile(user: {
   const raw = meta.full_name ?? meta.name ?? user.email?.split("@")[0] ?? "User";
   const parts = raw.trim().split(/\s+/);
 
+  // Do NOT include role here — it would reset an admin/vendor back to customer
+  // on every login. Role is set once on first insert via the DB default ('customer')
+  // and only changed explicitly via the admin panel.
   await svc.from("profiles").upsert(
     {
       id: user.id,
@@ -101,7 +104,6 @@ async function upsertProfile(user: {
       first_name: meta.first_name ?? parts[0] ?? "User",
       last_name: meta.last_name ?? parts.slice(1).join(" ") ?? "",
       avatar_url: meta.avatar_url ?? meta.picture ?? null,
-      role: "customer",
     },
     { onConflict: "id", ignoreDuplicates: false },
   );
