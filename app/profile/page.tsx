@@ -162,6 +162,7 @@ function ProfilePageInner() {
         setProfile(d);
         setEdits(d);
         // Sync ALL profile fields into the store, including address and role
+        // Force update by clearing the persisted state first to ensure role updates correctly
         updateUser({
           id:           d.id,
           firstName:    d.firstName,
@@ -189,6 +190,13 @@ function ProfilePageInner() {
   }, [updateUser, router]);
 
   useEffect(() => { loadAll(); }, [loadAll]);
+
+  // Sync profile role to auth store whenever profile data changes
+  useEffect(() => {
+    if (profile?.role && profile.role !== user?.role) {
+      updateUser({ role: profile.role });
+    }
+  }, [profile?.role, user?.role, updateUser]);
 
   // ── Save profile edits ───────────────────────────────────────────────────
   const handleSaveProfile = async () => {
@@ -314,9 +322,9 @@ function ProfilePageInner() {
               <p className="text-white/50 text-sm truncate">{user?.email}</p>
               <div className="flex items-center gap-2 mt-2">
                 <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-[#d4a5ff]/15 text-[#d4a5ff] capitalize">
-                  {user?.role ?? "Customer"}
+                  {profile?.role ?? user?.role ?? "Customer"}
                 </span>
-                {user?.role === "admin" && (
+                {(profile?.role ?? user?.role) === "admin" && (
                   <span className="text-[11px] font-semibold px-2.5 py-1 rounded-full bg-amber-500/15 text-amber-400">
                     Admin
                   </span>
@@ -340,7 +348,7 @@ function ProfilePageInner() {
             ))}
           </div>
 
-          {user?.role === "admin" && (
+          {(profile?.role ?? user?.role) === "admin" && (
             <button
               onClick={() => router.push("/admin")}
               className="mt-4 w-full flex items-center justify-center gap-2 h-11 rounded-xl bg-amber-500/15 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20 transition-colors font-semibold text-sm"

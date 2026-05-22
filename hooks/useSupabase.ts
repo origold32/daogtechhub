@@ -128,6 +128,8 @@ export function useSessionHydration() {
           fetchingUserId.current = session.user.id;
           fetchAndStoreProfile(supabase, session.user.id, session.user.email, session.user.phone).then(() => {
             fetchingUserId.current = null;
+            // Ensure isHydrating is cleared after profile fetch completes
+            useAuthStore.getState().setHydrating(false);
           });
         } else if (!session) {
           logout();
