@@ -9,8 +9,8 @@ import {
   ArrowRightLeft, MessageSquare, Settings, LogOut, Menu,
   Plus, Eye, Edit, Trash2, Check, Clock,
   ChevronUp, ChevronDown, Search, Bell, Sun, Moon, BarChart3,
-  DollarSign, Boxes, Star, Upload, Image as ImageIcon, X,
-  Shield, UserCheck, Zap, RefreshCw, Filter, Download,
+  DollarSign, Upload, Image as ImageIcon, X,
+  Shield, UserCheck, Zap, RefreshCw,
   AlertTriangle, CheckCircle2, Wifi, Database, Lock, Loader2
 } from "lucide-react";
 import { useAuthStore } from "@/store/authStore";
@@ -144,32 +144,6 @@ const NAV_ITEMS = [
   { id: "settings" as const, label: "Settings", icon: Settings },
 ];
 
-const STATS = [
-  { label: "Total Revenue", value: "₦84.5M", change: "+12.5%", up: true, icon: DollarSign, color: "from-purple-500/20 to-lilac/10" },
-  { label: "Total Orders", value: "1,284", change: "+8.2%", up: true, icon: ShoppingBag, color: "from-blue-500/20 to-blue-400/10" },
-  { label: "Products", value: "36", change: "+4", up: true, icon: Boxes, color: "from-green-500/20 to-green-400/10" },
-  { label: "Customers", value: "3,891", change: "+15.3%", up: true, icon: Users, color: "from-amber-500/20 to-amber-400/10" },
-];
-
-const MONTHLY_REVENUE = [
-  { m: "Sep", v: 28 }, { m: "Oct", v: 36 }, { m: "Nov", v: 52 },
-  { m: "Dec", v: 89 }, { m: "Jan", v: 65 }, { m: "Feb", v: 80 }, { m: "Mar", v: 100 },
-];
-
-const CATEGORY_BREAKDOWN = [
-  { label: "Gadgets", pct: 42, color: "bg-lilac" },
-  { label: "Cars", pct: 30, color: "bg-blue-400" },
-  { label: "Real Estate", pct: 20, color: "bg-green-400" },
-  { label: "Jerseys", pct: 8, color: "bg-amber-400" },
-];
-
-const RECENT_ORDERS = [
-  { id: "#ORD-001", customer: "Adebayo Johnson", product: "iPhone 15 Pro Max", amount: 1250000, status: "delivered", date: "2 hrs ago" },
-  { id: "#ORD-002", customer: "Chioma Okafor", product: "Real Madrid Jersey", amount: 45000, status: "processing", date: "4 hrs ago" },
-  { id: "#ORD-003", customer: "Emeka Nwosu", product: "Lexus RX 350", amount: 42000000, status: "pending", date: "6 hrs ago" },
-  { id: "#ORD-004", customer: "Fatima Bello", product: "MacBook Pro M3", amount: 2800000, status: "shipped", date: "1 day ago" },
-  { id: "#ORD-005", customer: "Bode Williams", product: "PS5 Console", amount: 550000, status: "confirmed", date: "2 days ago" },
-];
 
 const ROLE_STYLES: Record<UserRole, string> = {
   admin: "bg-lilac/20 text-lilac",
@@ -221,6 +195,8 @@ export default function AdminPage() {
   const [swapsLoading, setSwapsLoading] = useState(false);
   const [enquiries, setEnquiries] = useState<Array<{ id: string; name: string; email: string; product: string; message: string; created_at: string; is_resolved: boolean }>>([]);
   const [enquiriesLoading, setEnquiriesLoading] = useState(false);
+
+  const [deletedProductIds, setDeletedProductIds] = useState<Set<string>>(new Set());
 
   const statsState = useFetchOne<AdminStats>("/api/admin/stats");
   const ordersState = useFetchOne<AdminOrder[]>("/api/admin/orders?pageSize=6");
@@ -279,9 +255,9 @@ export default function AdminPage() {
           color: "from-red-500/20 to-red-400/10",
         },
       ]
-    : STATS;
+    : [];
 
-  const revenueTrend = statsState.data?.monthlyRevenue ?? MONTHLY_REVENUE;
+  const revenueTrend = statsState.data?.monthlyRevenue ?? [];
   const totalInventory = statsState.data
     ? statsState.data.inventory.gadgets + statsState.data.inventory.jerseys + statsState.data.inventory.cars + statsState.data.inventory.realEstates
     : 0;
@@ -292,7 +268,7 @@ export default function AdminPage() {
         { label: "Real Estate", pct: totalInventory ? Math.round((statsState.data.inventory.realEstates / totalInventory) * 100) : 0, color: "bg-green-400" },
         { label: "Jerseys", pct: totalInventory ? Math.round((statsState.data.inventory.jerseys / totalInventory) * 100) : 0, color: "bg-amber-400" },
       ]
-    : CATEGORY_BREAKDOWN;
+    : [];
 
   const orderCounts = statsState.data
     ? {
@@ -509,6 +485,28 @@ export default function AdminPage() {
     }
   };
 
+  const handleDeleteProduct = async (productId: string, category: string, name: string) => {
+    if (!confirm(`Delete "${name}"? This cannot be undone.`)) return;
+    const endpointMap: Record<string, string> = {
+      Gadget: `/api/gadgets/${productId}`,
+      Jersey: `/api/jerseys/${productId}`,
+      Car: `/api/cars/${productId}`,
+      "Real Estate": `/api/realestate/${productId}`,
+    };
+    const endpoint = endpointMap[category];
+    if (!endpoint) { toast.error("Unknown product category"); return; }
+    try {
+      const res = await fetch(endpoint, { method: "DELETE" });
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error);
+      setDeletedProductIds((prev) => new Set([...prev, productId]));
+      toast.success(`${name} removed`);
+      statsState.mutate?.();
+    } catch (err) {
+      toast.error((err as Error).message ?? "Failed to delete product");
+    }
+  };
+
   // Live product data from API
   const { data: gadgetsData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;brand:string;condition:string}>(`/api/gadgets?pageSize=100`, section === "products");
   const { data: jerseysData } = useFetchProducts<{id:string;name:string;price:number;image_url:string;team:string}>(`/api/jerseys?pageSize=100`, section === "products");
@@ -520,7 +518,7 @@ export default function AdminPage() {
     ...jerseysData.map((p) => ({ ...p, cat: "Jersey", img: p.image_url, image: p.image_url })),
     ...carsData.map((p) => ({ ...p, cat: "Car", img: p.image_url, image: p.image_url })),
     ...estatesData.map((p) => ({ ...p, cat: "Real Estate", img: p.image_url, image: p.image_url })),
-  ].filter((p) => !searchQ || p.name.toLowerCase().includes(searchQ.toLowerCase()));
+  ].filter((p) => !deletedProductIds.has(p.id) && (!searchQ || p.name.toLowerCase().includes(searchQ.toLowerCase())));
 
   const sectionLabel = NAV_ITEMS.find((item) => item.id === section)?.label ?? section;
 
@@ -592,11 +590,11 @@ export default function AdminPage() {
               })}
             </nav>
 
-            {/* System status */}
+            {/* System status — derived from real fetch results */}
             <div className="px-4 py-3 border-t border-white/10 space-y-1.5">
               {[
-                { label: "Database", ok: true, icon: Database },
-                { label: "API", ok: true, icon: Wifi },
+                { label: "Database", ok: !statsState.error && !ordersState.error, icon: Database },
+                { label: "API", ok: !analyticsState.error && !alertsState.error, icon: Wifi },
                 { label: "Auth", ok: true, icon: Lock },
               ].map(({ label, ok, icon: Icon }) => (
                 <div key={label} className="flex items-center gap-2">
@@ -634,7 +632,13 @@ export default function AdminPage() {
             <h2 className="text-soft-white font-bold">{sectionLabel}</h2>
           </div>
           <div className="flex items-center gap-2">
-            <button onClick={() => toast.info("Refreshing data...")}
+            <button onClick={() => {
+                statsState.mutate?.();
+                ordersState.mutate?.();
+                manualPaymentsState.mutate?.();
+                analyticsState.mutate?.();
+                alertsState.mutate?.();
+              }}
               className="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center text-muted-lavender hover:text-soft-white transition-colors">
               <RefreshCw className="w-4 h-4" />
             </button>
@@ -644,7 +648,9 @@ export default function AdminPage() {
             </button>
             <button className="w-9 h-9 rounded-xl hover:bg-white/10 flex items-center justify-center relative">
               <Bell className="w-4 h-4 text-muted-lavender" />
-              <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+              {(statsState.data?.unreadNotifications ?? 0) > 0 && (
+                <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-red-500 rounded-full" />
+              )}
             </button>
           </div>
         </div>
@@ -670,7 +676,17 @@ export default function AdminPage() {
 
                   {/* Stats */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-                    {overviewStats.map((stat, i) => {
+                    {statsState.loading ? (
+                      Array.from({ length: 5 }).map((_, i) => (
+                        <div key={i} className="p-5 rounded-2xl border border-white/10 bg-white/3 animate-pulse">
+                          <div className="h-4 bg-white/10 rounded mb-3 w-1/2" />
+                          <div className="h-8 bg-white/10 rounded mb-2 w-3/4" />
+                          <div className="h-3 bg-white/10 rounded w-1/2" />
+                        </div>
+                      ))
+                    ) : statsState.error ? (
+                      <div className="col-span-2 lg:col-span-4 p-4 rounded-2xl border border-red-400/20 bg-red-500/10 text-red-200 text-sm">{statsState.error}</div>
+                    ) : overviewStats.map((stat, i) => {
                       const Icon = stat.icon;
                       return (
                         <motion.div key={stat.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.08 }}
@@ -697,20 +713,31 @@ export default function AdminPage() {
                         <span className="text-xs text-muted-lavender bg-white/5 px-3 py-1 rounded-full">Last 7 months</span>
                       </div>
                       <div className="flex items-end gap-2 h-32">
-                        {revenueTrend.map(({ m, v }, i) => (
-                          <div key={m} className="flex-1 flex flex-col items-center gap-1 group">
-                            <span className="text-xs text-muted-lavender opacity-0 group-hover:opacity-100 transition-opacity">
-                              ₦{(v * 0.845).toFixed(0)}M
-                            </span>
-                            <motion.div
-                              initial={{ height: 0 }}
-                              animate={{ height: `${v}%` }}
-                              transition={{ duration: 0.8, delay: i * 0.08 }}
-                              className="w-full rounded-t-lg bg-gradient-to-t from-lilac/40 to-lilac cursor-pointer hover:from-lilac/60 hover:to-lilac transition-colors"
-                            />
-                            <span className="text-xs text-muted-lavender">{m}</span>
-                          </div>
-                        ))}
+                        {statsState.loading ? (
+                          Array.from({ length: 7 }).map((_, i) => (
+                            <div key={i} className="flex-1 flex flex-col items-end gap-1">
+                              <div className="w-full rounded-t-lg bg-white/10 animate-pulse" style={{ height: `${30 + Math.random() * 40}%` }} />
+                            </div>
+                          ))
+                        ) : revenueTrend.length === 0 ? (
+                          <p className="text-muted-lavender text-sm self-center w-full text-center">No revenue data yet</p>
+                        ) : (() => {
+                          const maxV = Math.max(...revenueTrend.map((r) => r.v), 0.001);
+                          return revenueTrend.map(({ m, v }, i) => (
+                            <div key={m} className="flex-1 flex flex-col items-center gap-1 group">
+                              <span className="text-xs text-muted-lavender opacity-0 group-hover:opacity-100 transition-opacity">
+                                ₦{v.toFixed(2)}M
+                              </span>
+                              <motion.div
+                                initial={{ height: 0 }}
+                                animate={{ height: `${(v / maxV) * 100}%` }}
+                                transition={{ duration: 0.8, delay: i * 0.08 }}
+                                className="w-full rounded-t-lg bg-gradient-to-t from-lilac/40 to-lilac cursor-pointer hover:from-lilac/60 hover:to-lilac transition-colors"
+                              />
+                              <span className="text-xs text-muted-lavender">{m}</span>
+                            </div>
+                          ));
+                        })()}
                       </div>
                     </div>
 
@@ -718,7 +745,19 @@ export default function AdminPage() {
                     <div className="p-5 rounded-2xl border border-white/10 bg-white/3">
                       <h3 className="text-soft-white font-bold mb-5">Inventory by Category</h3>
                       <div className="space-y-4">
-                        {categoryBreakdown.map(({ label, pct, color }, i) => (
+                        {statsState.loading ? (
+                          Array.from({ length: 4 }).map((_, i) => (
+                            <div key={i} className="animate-pulse">
+                              <div className="flex justify-between mb-1.5">
+                                <div className="h-3 bg-white/10 rounded w-16" />
+                                <div className="h-3 bg-white/10 rounded w-8" />
+                              </div>
+                              <div className="h-2 bg-white/10 rounded-full" />
+                            </div>
+                          ))
+                        ) : categoryBreakdown.length === 0 ? (
+                          <p className="text-muted-lavender text-sm">No inventory data yet</p>
+                        ) : categoryBreakdown.map(({ label, pct, color }, i) => (
                           <div key={label}>
                             <div className="flex justify-between mb-1.5">
                               <span className="text-muted-lavender text-sm">{label}</span>
@@ -808,7 +847,7 @@ export default function AdminPage() {
                                 <div className="flex gap-2">
                                   <button className="p-1.5 rounded-lg text-muted-lavender hover:text-lilac hover:bg-lilac/10 transition-colors"><Eye className="w-4 h-4" /></button>
                                   <button className="p-1.5 rounded-lg text-muted-lavender hover:text-soft-white hover:bg-white/10 transition-colors"><Edit className="w-4 h-4" /></button>
-                                  <button onClick={() => toast.success("Product removed")}
+                                  <button onClick={() => handleDeleteProduct(p.id, p.cat, p.name)}
                                     className="p-1.5 rounded-lg text-muted-lavender hover:text-red-400 hover:bg-red-500/10 transition-colors"><Trash2 className="w-4 h-4" /></button>
                                 </div>
                               </td>
@@ -1011,10 +1050,6 @@ export default function AdminPage() {
                 <div className="space-y-5">
                   <div className="flex items-center justify-between flex-wrap gap-4">
                     <h1 className="text-2xl font-bold text-soft-white">Users & Role Management</h1>
-                    <Button onClick={() => toast.info("Invite sent!")}
-                      className="bg-lilac text-deep-purple hover:bg-lilac/90 rounded-xl gap-2 text-sm font-bold">
-                      <Plus className="w-4 h-4" /> Invite Staff
-                    </Button>
                     <Button onClick={fetchUsers} variant="outline"
                       className="border-white/20 text-muted-lavender hover:bg-white/10 rounded-xl gap-2 text-sm">
                       <RefreshCw className={cn("w-4 h-4", usersLoading && "animate-spin")} /> Refresh
@@ -1404,10 +1439,10 @@ export default function AdminPage() {
                               <p className="text-muted-lavender text-xs mb-1">{e.email} · Re: {e.product}</p>
                               <p className="text-muted-lavender/80 text-sm">{e.message}</p>
                             </div>
-                            <button onClick={() => toast.info(`Opening reply to ${e.name}...`)}
+                            <a href={`mailto:${e.email}?subject=Re: ${encodeURIComponent(e.product)}&body=Hi ${encodeURIComponent(e.name)},%0A%0A`}
                               className="text-xs text-lilac hover:bg-lilac/10 px-3 py-1.5 rounded-xl border border-lilac/30 flex-shrink-0 transition-colors">
                               Reply
-                            </button>
+                            </a>
                           </div>
                         );
                       })}
