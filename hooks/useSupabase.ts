@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import type { AuthChangeEvent, Session } from "@supabase/supabase-js";
 import {
-  getSupabaseBrowserClient as _getClient,
+  getSupabaseBrowserClient,
   resetSupabaseBrowserClient,
 } from "@/lib/supabaseClient";
 import {
@@ -16,7 +16,7 @@ import { useCartStore } from "@/store/cartStore";
 
 function getClient() {
   if (typeof window === "undefined") return null;
-  return _getClient();
+  return getSupabaseBrowserClient();
 }
 
 export function toFriendlyError(raw: string | undefined | null): string {
@@ -283,7 +283,7 @@ export function useWishlistSync() {
       .from("wishlists")
       .select("*")
       .eq("user_id", user.id)
-      .then(({ data: serverItems }) => {
+      .then(({ data: serverItems }: { data: any[] | null }) => {
         if (serverItems) {
           // Add to local if not present (assuming wishlist store exists)
           // For now, assume wishlist is in localStorage or store
@@ -359,38 +359,18 @@ export function useSupabaseAuth() {
     }
 
     setIsLoading(true);
-    clearSupabasePkceCookiesInBrowser();
 
-    if ("serviceWorker" in navigator) {
-      const registrations = await navigator.serviceWorker.getRegistrations().catch(() => []);
-      await Promise.all(registrations.map((registration) => registration.unregister().catch(() => false)));
-    }
-
-    if ("caches" in window) {
-      const cacheKeys = await caches.keys().catch(() => []);
-      await Promise.all(
-        cacheKeys
-          .filter((key) => key.startsWith("daog-"))
-          .map((key) => caches.delete(key).catch(() => false)),
-      );
-    }
-
-    resetSupabaseBrowserClient();
-    resetSupabaseImplicitClient();
     try {
-      const supabase = getSupabaseImplicitClient();
-      if (!supabase) {
-        throw new Error("Supabase not configured - check your .env.local file.");
-      }
+      // Use the standard browser client (PKCE flow) instead of implicit flow.
+      const supabase = getSupabaseBrowserClient();
 
-      const verifyingUrl = new URL("/auth/verifying", window.location.origin);
-      verifyingUrl.searchParams.set("next", redirectPath ? redirectPath : "/");
-      verifyingUrl.searchParams.set("oauthProvider", provider);
+      const callbackUrl = new URL("/auth/callback", window.location.origin);
+      callbackUrl.searchParams.set("next", redirectPath ? redirectPath : "/");
 
       const { error } = await supabase.auth.signInWithOAuth({
         provider,
         options: {
-          redirectTo: verifyingUrl.toString(),
+          redirectTo: callbackUrl.toString(),
         },
       });
 

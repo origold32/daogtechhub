@@ -16,16 +16,6 @@ function isValidPhone(v: string) {
 }
 
 export async function POST(req: NextRequest) {
-  const ip = getClientIp(req.headers);
-  const { success, remaining, reset } = authLimiter.check(`otp:${ip}`);
-  if (!success) {
-    const retryAfter = Math.ceil((reset - Date.now()) / 1000);
-    return NextResponse.json(
-      { success: false, error: `Too many attempts — please wait ${retryAfter}s.` },
-      { status: 429, headers: { "Retry-After": String(retryAfter) } }
-    );
-  }
-
   let body: { identifier?: string; type?: string; firstName?: string; lastName?: string; redirectTo?: string };
   try { body = await req.json(); }
   catch { return NextResponse.json({ success: false, error: "Invalid request." }, { status: 400 }); }
@@ -34,6 +24,16 @@ export async function POST(req: NextRequest) {
 
   if (!identifier?.trim() || !type) {
     return NextResponse.json({ success: false, error: "Email or phone number is required." }, { status: 400 });
+  }
+
+  // Rate limit by account (identifier) instead of general IP
+  const { success, remaining, reset } = authLimiter.check(`otp:${identifier.trim().toLowerCase()}`);
+  if (!success) {
+    const retryAfter = Math.ceil((reset - Date.now()) / 1000);
+    return NextResponse.json(
+      { success: false, error: `Too many attempts — please wait ${retryAfter}s.` },
+      { status: 429, headers: { "Retry-After": String(retryAfter) } }
+    );
   }
   if (type !== "email" && type !== "phone") {
     return NextResponse.json({ success: false, error: "Invalid type." }, { status: 400 });
