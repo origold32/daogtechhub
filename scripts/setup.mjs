@@ -52,31 +52,35 @@ fs.readFileSync(envPath, "utf8")
 const SUPABASE_URL = envVars["NEXT_PUBLIC_SUPABASE_URL"];
 const SERVICE_KEY = envVars["SUPABASE_SERVICE_ROLE_KEY"];
 const ANON_KEY = envVars["NEXT_PUBLIC_SUPABASE_ANON_KEY"];
+const SUPABASE_ACCESS_TOKEN = process.env.SUPABASE_ACCESS_TOKEN || envVars["SUPABASE_ACCESS_TOKEN"];
+const AUTH_TOKEN = SUPABASE_ACCESS_TOKEN || SERVICE_KEY;
 
 if (!SUPABASE_URL || !ANON_KEY) {
   console.error(r("✗ NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY are required in .env.local"));
   process.exit(1);
 }
 
-if (!SERVICE_KEY) {
-  console.warn(y("⚠ SUPABASE_SERVICE_ROLE_KEY not found — cannot auto-run SQL"));
+if (!AUTH_TOKEN) {
+  console.warn(y("⚠ SUPABASE_ACCESS_TOKEN or SUPABASE_SERVICE_ROLE_KEY not found — cannot auto-run SQL"));
 } else {
   console.log(g("✓ .env.local loaded successfully"));
 }
 
-// ── Step 3: Run patch SQL via service role ───────────────────────
-const PATCH_SQL = path.join(ROOT, "supabase", "PATCH.sql");
+// ── Step 3: Run patch SQL via Supabase Management API ─────────────
+const SQL_FILE = fs.existsSync(path.join(ROOT, "supabase", "PRODUCTION_SETUP.sql"))
+  ? path.join(ROOT, "supabase", "PRODUCTION_SETUP.sql")
+  : path.join(ROOT, "supabase", "PATCH.sql");
 
-if (!fs.existsSync(PATCH_SQL)) {
-  console.warn(y("⚠ supabase/PATCH.sql not found, skipping auto-migration"));
-} else if (!SERVICE_KEY) {
-  console.warn(y("⚠ No service role key — skipping auto-migration"));
+if (!fs.existsSync(SQL_FILE)) {
+  console.warn(y("⚠ SQL setup file not found, skipping auto-migration"));
+} else if (!AUTH_TOKEN) {
+  console.warn(y("⚠ No management access token or service role key — skipping auto-migration"));
 } else {
   console.log(b("\n⏳ Running database patch via Supabase…\n"));
 
   // Extract project ref from URL: https://xxxx.supabase.co → xxxx
   const projectRef = SUPABASE_URL.replace("https://", "").split(".")[0];
-  const sql = fs.readFileSync(PATCH_SQL, "utf8");
+  const sql = fs.readFileSync(SQL_FILE, "utf8");
 
   try {
     // Use fetch (Node 18+) to call Supabase management API
@@ -86,7 +90,7 @@ if (!fs.existsSync(PATCH_SQL)) {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${SERVICE_KEY}`,
+          Authorization: `Bearer ${AUTH_TOKEN}`,
         },
         body: JSON.stringify({ query: sql }),
       }

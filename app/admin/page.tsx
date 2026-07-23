@@ -21,6 +21,7 @@ import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import { useSignOut } from "@/hooks/useSignOut";
+import FileUploadHandler from "@/components/reusables/file-upload-handler";
 
 type AdminSection = "overview" | "products" | "orders" | "analytics" | "support" | "swaps" | "enquiries" | "manual-payments" | "settings" | "users" | "auth-logs" | "marketing";
 type UserRole = "admin" | "customer" | "vendor";
@@ -167,6 +168,7 @@ const STATUS_STYLES: Record<string, string> = {
 interface AddProductForm {
   name: string; brand: string; category: string;
   price: string; description: string; condition: string;
+  image?: string;
 }
 
 export default function AdminPage() {
@@ -184,7 +186,7 @@ export default function AdminPage() {
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [showAddProduct, setShowAddProduct] = useState(false);
   const [productForm, setProductForm] = useState<AddProductForm>({
-    name: "", brand: "", category: "gadget", price: "", description: "", condition: "Brand New",
+    name: "", brand: "", category: "gadget", price: "", description: "", condition: "Brand New", image: "",
   });
   const [searchQ, setSearchQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<UserRole | "all">("all");
@@ -466,13 +468,13 @@ export default function AdminPage() {
       const endpoint = productForm.category === "gadget" ? "/api/gadgets" : productForm.category === "jersey" ? "/api/jerseys" : productForm.category === "car" ? "/api/cars" : "/api/realestate";
       const res = await fetch(endpoint, {
         method: "POST", headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name: productForm.name, brand: productForm.brand, type: "accessory", price: parseFloat(productForm.price), description: productForm.description, condition: productForm.condition }),
+        body: JSON.stringify({ name: productForm.name, brand: productForm.brand, type: "accessory", price: parseFloat(productForm.price), description: productForm.description, condition: productForm.condition, image: productForm.image }),
       });
       const json = await res.json();
       if (!json.success) throw new Error(json.error);
       toast.success(`${productForm.name} added successfully! 🎉`);
       setShowAddProduct(false);
-      setProductForm({ name: "", brand: "", category: "gadget", price: "", description: "", condition: "Brand New" });
+      setProductForm({ name: "", brand: "", category: "gadget", price: "", description: "", condition: "Brand New", image: "" });
     } catch (err) {
       toast.error((err as Error).message ?? "Failed to add product");
     }
@@ -1537,11 +1539,26 @@ export default function AdminPage() {
                 </div>
                 <div className="p-6 space-y-4">
                   {/* Image upload */}
-                  <div className="border-2 border-dashed border-white/10 rounded-2xl p-8 text-center hover:border-lilac/30 transition-colors cursor-pointer"
-                    onClick={() => toast.info("Image upload requires Supabase Storage setup")}>
-                    <ImageIcon className="w-8 h-8 text-muted-lavender/30 mx-auto mb-2" />
-                    <p className="text-muted-lavender text-sm">Click to upload product image</p>
-                    <p className="text-muted-lavender/50 text-xs mt-1">PNG, JPG up to 10MB</p>
+                  <div className="space-y-2">
+                    <FileUploadHandler
+                      bucket="products"
+                      fileType="image"
+                      label="Upload Product Image"
+                      maxSizeMB={10}
+                      onUploadComplete={(url) => setProductForm((prev) => ({ ...prev, image: url }))}
+                    />
+                    {productForm.image && (
+                      <div className="relative w-full h-28 rounded-xl overflow-hidden border border-lilac/30 bg-black/40">
+                        <Image src={productForm.image} alt="Product image preview" fill className="object-cover" />
+                        <button
+                          type="button"
+                          onClick={() => setProductForm((prev) => ({ ...prev, image: "" }))}
+                          className="absolute top-2 right-2 p-1 bg-black/70 rounded-full text-white hover:bg-red-500/80 transition-colors"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    )}
                   </div>
 
                   <div className="grid grid-cols-2 gap-3">
