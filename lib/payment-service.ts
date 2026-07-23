@@ -2,6 +2,7 @@ import { createHmac, randomUUID } from "crypto";
 import { createServiceRoleClient } from "@/supabase/server";
 import type { Database } from "@/types/database";
 import { buildCustomerName } from "./user-service";
+import { sendReceiptEmail } from "./email-service";
 
 export type PaystackPaymentStatus = "success" | "failed" | "abandoned" | "pending";
 
@@ -158,6 +159,19 @@ export async function processPaystackTransaction(
       read: false,
       data: { order_id: orderId, reference: tx.reference, receipt_number: result.receipt_number },
     });
+
+    const customerEmail = tx.customer?.email;
+    if (customerEmail) {
+      sendReceiptEmail({
+        receiptNumber: result.receipt_number ?? "N/A",
+        amount: tx.amount / 100,
+        currency: tx.currency ?? EXPECTED_CURRENCY,
+        paidAt: tx.paid_at ?? new Date().toISOString(),
+        customerName: tx.metadata?.customer_name ?? buildCustomerName({ email: customerEmail }, null),
+        customerEmail: customerEmail,
+        orderId: orderId,
+      }).catch(err => console.error("[payment-service] Background receipt email failed:", err));
+    }
 
     return {
       reference: tx.reference,

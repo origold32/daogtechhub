@@ -773,3 +773,21 @@ create policy "receipts: admin all" on receipts for all
 create index if not exists idx_receipts_user      on receipts(user_id);
 create index if not exists idx_receipts_reference on receipts(payment_reference);
 create index if not exists idx_receipts_order     on receipts(order_id);
+
+-- ── 19. Security Hardening: Prevent Role Escalation ──────────────────────────
+create or replace function public.restrict_profile_role_update()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.role is distinct from new.role then
+    if not public.is_admin(auth.uid()) then
+      raise exception 'Unauthorized: Only admins can change roles.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_role_escalation on profiles;
+create trigger prevent_role_escalation
+  before update on profiles
+  for each row execute procedure public.restrict_profile_role_update();

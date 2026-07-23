@@ -12,7 +12,7 @@ import { FaGoogle } from "react-icons/fa";
 import AppLogo from "@/components/reusables/app-logo";
 import { InputOtpV1 } from "@/components/reusables/otp-input";
 import { useSupabaseAuth, toFriendlyError } from "@/hooks/useSupabase";
-import { resetSupabaseBrowserClient } from "@/lib/supabaseClient";
+import { getSupabaseBrowserClient, resetSupabaseBrowserClient } from "@/lib/supabaseClient";
 import { resetSupabaseImplicitClient } from "@/lib/supabaseImplicitClient";
 import { useAuthStore } from "@/store/authStore";
 import { cn } from "@/lib/utils";
@@ -20,6 +20,8 @@ import { clearSupabasePkceCookiesInBrowser } from "@/lib/auth-utils";
 import CustomCountDown from "@/components/reusables/countdown-custom";
 
 type Step = "email" | "otp" | "waiting" | "success";
+
+const PRIMARY_ADMIN_EMAILS = ["daogstore@gmail.com", "adegbesanadebola1@gmail.com"];
 
 function ErrorBanner({ message }: { message: string }) {
   return (
@@ -108,7 +110,25 @@ function AuthForm() {
     if (isAuthenticated && user) {
       didRedirect.current = true;
       if (step === "waiting") setStep("success");
-      setTimeout(() => router.replace(redirectTo), 600);
+
+      const handleRedirect = async () => {
+        let finalRedirect = redirectTo;
+        if (redirectTo === "/") {
+          const isPrimaryAdmin = user.email && PRIMARY_ADMIN_EMAILS.includes(user.email);
+          if (isPrimaryAdmin) {
+            finalRedirect = "/admin";
+          } else {
+            const supabase = getSupabaseBrowserClient();
+            const { data } = await supabase.from("profiles").select("role").eq("id", user.id).single();
+            if (data?.role === "admin") {
+              finalRedirect = "/admin";
+            }
+          }
+        }
+        setTimeout(() => router.replace(finalRedirect), 600);
+      };
+
+      handleRedirect();
     } else if (step === "waiting") {
       // isHydrating just cleared but not authenticated
       // This happens when session didn't persist — show error

@@ -407,6 +407,24 @@ update auth.users
 set raw_app_meta_data = coalesce(raw_app_meta_data, '{}'::jsonb) || '{"role": "admin"}'::jsonb
 where email in ('adegbesanadebola1@gmail.com', 'daogstore@gmail.com');
 
+-- ── 15. Security Hardening ─────────────────────────────────────────────────────
+create or replace function public.restrict_profile_role_update()
+returns trigger language plpgsql security definer set search_path = public as $$
+begin
+  if old.role is distinct from new.role then
+    if not public.is_admin(auth.uid()) then
+      raise exception 'Unauthorized: Only admins can change roles.';
+    end if;
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists prevent_role_escalation on profiles;
+create trigger prevent_role_escalation
+  before update on profiles
+  for each row execute procedure public.restrict_profile_role_update();
+
 -- =============================================================================
 -- END OF PRODUCTION SETUP
 -- =============================================================================

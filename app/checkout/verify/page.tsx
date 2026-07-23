@@ -9,6 +9,7 @@ import { motion } from "framer-motion";
 import { CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import { useCartStore } from "@/store/cartStore";
 import Link from "next/link";
+import Image from "next/image";
 
 function VerifyContent() {
   const router = useRouter();
@@ -58,6 +59,9 @@ function VerifyContent() {
 
         {status === "success" && (
           <>
+            <div className="flex justify-center mb-2">
+              <Image src="/images/logo.png" alt="DAOG Tech Hub Logo" width={140} height={35} className="object-contain" />
+            </div>
             <CheckCircle2 className="w-20 h-20 text-green-400 mx-auto" strokeWidth={1.5} />
             <div>
               <h1 className="text-2xl font-bold text-white">Payment Successful! 🎉</h1>

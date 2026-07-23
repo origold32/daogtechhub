@@ -12,6 +12,7 @@ import {
 import { useCartStore } from "@/store/cartStore";
 import { formatCurrency } from "@/lib/formatCurrency";
 import Link from "next/link";
+import Image from "next/image";
 import { Button } from "@/components/ui/button";
 
 interface ReceiptData {
@@ -97,10 +98,15 @@ function CallbackContent() {
             </div>
 
             {/* Receipt card */}
-            <div className="rounded-2xl border border-white/15 bg-white/[0.04] overflow-hidden">
-              <div className="flex items-center gap-2 px-5 py-3.5 border-b border-white/10 bg-white/[0.03]">
-                <Receipt size={15} className="text-[#d4a5ff]" />
-                <span className="text-white/70 text-xs font-semibold uppercase tracking-widest">Receipt</span>
+            <div className="rounded-2xl border border-white/15 bg-white/[0.04] overflow-hidden relative">
+              <div className="flex items-center justify-between px-5 py-3.5 border-b border-white/10 bg-white/[0.03]">
+                <div className="flex items-center gap-2">
+                  <Receipt size={15} className="text-[#d4a5ff]" />
+                  <span className="text-white/70 text-xs font-semibold uppercase tracking-widest">Receipt</span>
+                </div>
+                <div className="w-[80px]">
+                  <Image src="/images/logo.png" alt="DAOG Tech Hub Logo" width={160} height={40} className="w-full object-contain" />
+                </div>
               </div>
               <div className="px-5 py-4 space-y-3 text-sm">
                 {[

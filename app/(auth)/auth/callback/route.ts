@@ -169,6 +169,24 @@ export async function GET(request: NextRequest) {
     return redirectWithClearedPkce(request, errorUrl.toString());
   }
 
+  let finalRedirectPath = redirectPath;
+  if (finalRedirectPath === "/") {
+    const PRIMARY_ADMIN_EMAILS = ["daogstore@gmail.com", "adegbesanadebola1@gmail.com"];
+    if (data.user.email && PRIMARY_ADMIN_EMAILS.includes(data.user.email)) {
+      finalRedirectPath = "/admin";
+    } else {
+      const { data: profile } = await supabase.from("profiles").select("role").eq("id", data.user.id).single();
+      if (profile?.role === "admin") {
+        finalRedirectPath = "/admin";
+      }
+    }
+    
+    if (finalRedirectPath !== redirectPath) {
+      const finalUrl = new URL(finalRedirectPath, origin).toString();
+      response.headers.set("Location", finalUrl);
+    }
+  }
+
   response.headers.set("Cache-Control", "private, no-store");
   upsertProfile(data.user).catch(() => {});
   return response;
